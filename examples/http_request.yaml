@@ -1,0 +1,52 @@
+services:
+  catFacts:
+    type: http
+    hostname: '{{env.CAT_FACT_HOSTNAME}}'
+    tls: true
+  unsigned9_mqtt:
+    type: mqtt
+    hostname: '{{env.MQTT_HOSTNAME}}'
+  unsigned8_mqtt:
+    type: mqtt
+    hostname: '{{env.MQTT_HOSTNAME}}'
+
+testCases:
+  getACatFact:
+    steps:
+      - id: get_a_cat_fact
+        type: http_request
+        service: catFacts
+        path: /fact
+        expect:
+          status_code: 200
+          json_schema:
+            type: object
+            properties:
+              fact:
+                type: string
+              length:
+                type: integer
+            required:
+              - fact
+              - length
+  mqttPingPong:
+    steps:
+      - id: subscribe_for_a_message
+        type: mqtt_subscribe
+        service: unsigned9_mqtt
+        topic: hello/world
+      - id: mqtt_pub
+        type: mqtt_publish
+        service: unsigned8_mqtt
+        topic: hello/world
+        json: hi
+      - id: check_received_message
+        type: mqtt_message
+        from: subscribe_for_a_message
+        timeoutSeconds: 4
+        expect:
+          count: 1
+          topic: hello/world
+          json_schema:
+            type: string
+            const: hi

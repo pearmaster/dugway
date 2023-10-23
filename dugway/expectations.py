@@ -1,0 +1,3 @@
+
+class ExpectationFailure(Exception):
+    pass
