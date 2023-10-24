@@ -119,6 +119,7 @@ class TestCase(JsonSchemaDefinedObject):
     def __init__(self, name: str, runner, config: JsonConfigType):
         super().__init__(config)
         self._runner = runner
+        self._steps_by_id = dict()
         self._steps: list[TestStep] = list()
         for step_config in config.get('steps', []):
             step_mgr = driver.DriverManager(
@@ -131,9 +132,16 @@ class TestCase(JsonSchemaDefinedObject):
                 }
             )
             self._steps.append(step_mgr.driver)
+            if step_id := step_config.get('id'):
+                self._steps_by_id[step_id] = step_mgr.driver
+        self._current_step = None
+
+    def get_step(self, step_id: str) -> TestStep:
+        return self._steps_by_id[step_id]
 
     def run(self):
         for i, test_step in enumerate(self._steps):
+            self._current_step = test_step
             print(f"Step: {test_step.get_name(str(i))}")
             test_step.run()
 
@@ -176,6 +184,7 @@ class TestSuite(JsonSchemaDefinedObject):
             case_name = case_config.get('name', case_key)
             the_case = TestCase(case_name, self._runner, case_config)
             self._cases[case_name] = the_case
+        self._current_case = None
 
     @property
     def name(self):
@@ -189,6 +198,7 @@ class TestSuite(JsonSchemaDefinedObject):
             service.setup()
         for case_name, test_case in self._cases.items():
             print(f"Running test case: {case_name}")
+            self._current_case = test_case
             test_case.run()
             for service in self._services.values():
                 service.reset()
@@ -230,6 +240,9 @@ class TestRunner:
     def get_service(self, service_name: str):
         return self._suite.get_service(service_name)
 
+    def get_step(self, step_id: str):
+        return self._suite._current_case.get_step(step_id)
+
     def template_eval(self, element: str|list[Any]|dict[str,Any], context:dict[str,Any]|None=None):
         if isinstance(element, str):
             template = self.jinja2_env.from_string(element)
@@ -237,6 +250,19 @@ class TestRunner:
                 return template.render()
             else:
                 return template.render(context)
+        elif isinstance(element, int):
+            template = self.jinja2_env.from_string(str(element))
+            if context is None:
+                return int(template.render())
+            else:
+                return int(template.render(context))
+        elif isinstance(element, bool):
+            template = self.jinja2_env.from_string(str(element))
+            if context is None:
+                v = template.render()
+            else:
+                v = template.render(context)
+            return v is True or v.lower == 'true' or v == 1
 
     def run(self):
         print(f"Running TestSuite: {self._suite.name}")

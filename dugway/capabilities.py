@@ -1,6 +1,7 @@
 from typing import Any
 from meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType
 import json
+from collections import deque
 
 class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
     
@@ -12,6 +13,9 @@ class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
     @property
     def name(self):
         return self._name
+    
+    def __repr__(self) -> str:
+        return f"<Capability {self._name}>"
 
 
 class JsonResponseBodyCapability(JsonSchemaDefinedCapability):
@@ -35,6 +39,24 @@ class JsonResponseBodyCapability(JsonSchemaDefinedCapability):
         return True
 
 
+class JsonMultiResponseCapability(JsonSchemaDefinedCapability):
+
+    def __init__(self, runner, config: JsonConfigType):
+        super().__init__("JsonMultiResponse", runner, config)
+        self._responses: deque()
+
+    def pop_oldest(self) -> dict[str, Any]:
+        self._responses.popleft()    
+
+    def pop_newest(self) -> dict[str, Any]:
+        self._responses.pop()
+
+    def add_response(self, json_resp: dict[str, Any]):
+        self._responses.append(json_resp)
+
+    def get_config_schema(self) -> JsonSchemaType:
+        return True
+
 class ServiceDependency(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
@@ -53,3 +75,24 @@ class ServiceDependency(JsonSchemaDefinedCapability):
 
     def get_service(self):
         return self._runner.get_service(self._config.get('service'))
+    
+
+class FromStep(JsonSchemaDefinedCapability):
+
+    def __init__(self, runner, config: JsonConfigType):
+        super().__init__("FromStep", runner, config)
+    
+    def get_config_schema(self) -> JsonSchemaType:
+        return {
+            "type": "object",
+            "properties": {
+                "from":{
+                    "type": "string"
+                }
+            },
+            "required": ["from"]
+        }
+    
+    def get_step(self):
+        from_step_id = self._config.get('from')
+        return self._runner.get_step(from_step_id)

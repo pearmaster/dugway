@@ -30,3 +30,5 @@ mqtt = 'dugway.mqtt:MqttService'
 [project.entry-points.dugwayteststep]
 http_request = 'dugway.web:HttpRequest'
 mqtt_publish = 'dugway.mqtt:MqttPublish'
+mqtt_subscribe = 'dugway.mqtt:MqttSubscribe'
+mqtt_message = 'dugway.mqtt:MqttMessage'

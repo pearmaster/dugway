@@ -13,7 +13,7 @@ class HttpService(Service):
 
     def __init__(self, runner, config):
         super().__init__(runner, config)
-        self._headers = config.get('headers', dict())
+        self._headers = { k:self._runner.template_eval(v) for (k,v) in config.get('headers', dict()).items() }
         self._hostname = self._runner.template_eval(config.get('hostname'))
         self._tls = config.get('tls', False)
         self._port = config.get('port', 443 if self._tls else 80)
@@ -49,9 +49,9 @@ class HttpService(Service):
     
     def make_request(self, method: str, path: str, **httpx_kwargs):
         all_headers = copy(self._headers)
-        all_headers.update(httpx_kwargs.get('headers', dict()))
-
-        url = f"http{self._tls and 's' or ''}://{self._hostname}:{self._port}{path}"
+        all_headers.update({ k:self._runner.template_eval(v) for (k,v) in httpx_kwargs.get('headers', dict())})
+        evaluated_path = self._runner.template_eval(path)
+        url = f"http{self._tls and 's' or ''}://{self._hostname}:{self._port}{evaluated_path}"
         print(url)
         httpx_kwargs['headers'] = all_headers
         resp = httpx.request(method, url, **httpx_kwargs)
