@@ -1,7 +1,11 @@
 from typing import Any
-from meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType
 import json
-from collections import deque
+from queue import Queue, Empty as QueueEmpty
+
+from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
+
+from meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType
+
 
 class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
     
@@ -43,16 +47,23 @@ class JsonMultiResponseCapability(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__("JsonMultiResponse", runner, config)
-        self._responses: deque()
+        self._messages = Queue()
 
-    def pop_oldest(self) -> dict[str, Any]:
-        self._responses.popleft()    
+    @property
+    def count(self):
+        return self._messages.qsize()
 
-    def pop_newest(self) -> dict[str, Any]:
-        self._responses.pop()
+    def get(self) -> dict[str, Any]:
+        self._messages.get()
 
-    def add_response(self, json_resp: dict[str, Any]):
-        self._responses.append(json_resp)
+    def get_or_none(self) -> dict[str, Any]|None:
+        try:
+            self._messages.get_nowait()
+        except QueueEmpty:
+            return None
+
+    def add_message(self, json_resp: dict[str, Any]):
+        self._messages.put(json_resp)
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
@@ -96,3 +107,67 @@ class FromStep(JsonSchemaDefinedCapability):
     def get_step(self):
         from_step_id = self._config.get('from')
         return self._runner.get_step(from_step_id)
+    
+
+class JsonSchemaExpectation(JsonSchemaDefinedCapability):
+
+    def __init__(self, runner, config: JsonConfigType):
+        super().__init__("JsonSchemaExpect", runner, config)
+    
+    def get_config_schema(self) -> JsonSchemaType:
+        return {
+            "type": "object",
+            "properties": {
+                "expect":{
+                    "type": "object",
+                    "properties": {
+                        "json_schema": {"type":"object"},
+                    },
+                    "required": ["json_schema"],
+                }
+            },
+        }
+    
+    def check_against_json_schema(self, data: dict[str, Any]):
+        if "expect" not in self._config and "json_schema" not in self._config["expect"]:
+            return True
+        validator = JsonSchemaValidator(self._config["expect"]["json_schema"])
+        try:
+            validator.validate(data)
+        except Exception as e:
+            raise e
+            return False
+        return True
+    
+class JsonSchemaFilter(JsonSchemaDefinedCapability):
+
+    def __init__(self, runner, config: JsonConfigType):
+        super().__init__("JsonSchemaFilter", runner, config)
+    
+    def get_config_schema(self) -> JsonSchemaType:
+        return {
+            "type": "object",
+            "properties": {
+                "filter":{
+                    "type": "object",
+                    "properties": {
+                        "json_schema": {"type":"object"},
+                    },
+                    "required": ["json_schema"],
+                }
+            },
+        }
+    
+    def check_against_json_schema(self, json_text: str):
+        if "filter" not in self._config or "json_schema" not in self._config["filter"]:
+            return True
+        try:
+            json_value = json.loads(json_text)
+        except:
+            return False
+        validator = JsonSchemaValidator(self._config["filter"]["json_schema"])
+        try:
+            validator.validate(json_value)
+        except Exception as e:
+            return False
+        return True

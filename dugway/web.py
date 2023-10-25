@@ -61,9 +61,10 @@ class HttpService(Service):
 class HttpRequest(TestStep):
 
     def __init__(self, runner: TestRunner, config: JsonConfigType):
-        serv_dep_cap = ServiceDependency(runner, config)
+        print("HttpRequest __init__")
+        self.serv_dep = ServiceDependency(runner, config)
         json_resp_cap = JsonResponseBodyCapability(runner, config)
-        super().__init__(runner, config, [serv_dep_cap, json_resp_cap])
+        super().__init__(runner, config, [self.serv_dep, json_resp_cap])
         self._path = config.get('path')
         self._method = config.get('method', 'GET')
         self._expectations = config.get('expect', dict())
@@ -103,7 +104,7 @@ class HttpRequest(TestStep):
         }
     
     def run(self):
-        http_service = self.get_capability("ServiceDependency").get_service()
+        http_service = self.serv_dep.get_service()
         resp = http_service.make_request(
             self._config.get('method', 'GET'),
             self._path,

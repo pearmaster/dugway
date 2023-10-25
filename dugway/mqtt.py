@@ -1,7 +1,9 @@
 
 from typing import Callable, Any
 import json
-
+from datetime import datetime, timedelta
+from time import sleep
+import logging
 
 import paho.mqtt.client as mqtt_client
 import paho.mqtt.properties as props
@@ -10,8 +12,16 @@ from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
 from runner import Service, TestStep, TestRunner
 from meta import JsonConfigType, JsonSchemaType
-from capabilities import ServiceDependency, JsonMultiResponseCapability, FromStep
+from capabilities import (
+    ServiceDependency,
+    JsonMultiResponseCapability,
+    FromStep,
+    JsonSchemaExpectation,
+    JsonSchemaFilter,
+)
 import expectations
+
+logger = logging.getLogger(__name__)
 
 class MqttService(Service):
 
@@ -136,7 +146,6 @@ class MqttService(Service):
         self._subscriptions.append(sub_topic)
         self.client.subscribe(sub_topic, qos)
 
-
 class MqttPublish(TestStep):
 
     def __init__(self, runner: TestRunner, config: JsonConfigType):
@@ -203,6 +212,12 @@ class MqttPublish(TestStep):
         }
 
     def run(self):
+        pub_args = [
+            self._topic,
+            self._payload,
+            self._qos,
+            self._retain
+        ]
         mqtt_service = self.get_capability("ServiceDependency").get_service()
         if mqtt_service.is_v5 and (pub_prop_config := self._config.get('publishProperties', False)):
             pub_props = props.Properties(PacketTypes.PUBLISH)
@@ -216,17 +231,17 @@ class MqttPublish(TestStep):
                 pub_props.CorrelationData = c_d
             if (c_t := pub_prop_config.get('contentType', False)) is not False:
                 pub_props.ContentType = c_t
-            mqtt_service.publish(self._topic, self._qos, self._retain, pub_props)
-        else:
-            mqtt_service.publish(self._topic, self._qos, self._retain)
-
+            pub_args.append(pub_props)
+        print(f"Publishing {pub_args}")
+        mqtt_service.publish(*pub_args)
 
 class MqttSubscribe(TestStep):
 
     def __init__(self, runner: TestRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
-        json_multi = JsonMultiResponseCapability(runner, config)
-        super().__init__(runner, config, [serv_dep_cap, json_multi])
+        json_filter = JsonSchemaFilter(runner, config)
+        self._json_multi = JsonMultiResponseCapability(runner, config)
+        super().__init__(runner, config, [serv_dep_cap, self._json_multi, json_filter])
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -238,12 +253,9 @@ class MqttSubscribe(TestStep):
                     "type": "integer",
                     "default": 0
                 },
-                "filters": {
+                "filter": {
                     "type": "object",
                     "properties": {
-                        "json_schema": {
-                            "type": "object",
-                        },
                         "publishProperties": MqttPublish.publish_property_schema(),
                     },
                     "additionalProperties": False,
@@ -252,13 +264,10 @@ class MqttSubscribe(TestStep):
         }
     
     def _receive_message(self, client: mqtt_client.Client, userdata: Any, message):
-        filters = self._config.get('filters', dict())
-        if (json_schema := filters.get('json_schema')) is not None:
-            validator = JsonSchemaValidator(json_schema)
-            try:
-                validator.validate(json.loads(message.payload.decode('utf-8')), json_schema)
-            except Exception as e:
-                return
+        js_filter_cap = self.get_capability("JsonSchemaFilter")
+        if not js_filter_cap.check_against_json_schema(message.payload.decode('utf-8')):
+            return
+        filters = self._config.get('filter', dict())
         if (expected_pub_props := filters.get('publishProperties', False)) is not False:
             pub_props = message.properties
             if (p_f_i := expected_pub_props.get('payloadFormatIndicator', False)) is not False:
@@ -276,7 +285,7 @@ class MqttSubscribe(TestStep):
             if (c_t := expected_pub_props.get('contentType', False)) is not False:
                 if c_t != pub_props.ContentType:
                     return
-        self.get_capability("JsonMultiResponse").add_message(json.loads(message.payload.decode('utf-8')))
+        self._json_multi.add_message(json.loads(message.payload.decode('utf-8')))
 
     def run(self):
         mqtt_service = self.get_capability("ServiceDependency").get_service()
@@ -287,26 +296,62 @@ class MqttMessage(TestStep):
 
     def __init__(self, runner: TestRunner, config: JsonConfigType):
         from_step = FromStep(runner, config)
-        super().__init__(runner, config, [from_step])
+        self._js_expect = JsonSchemaExpectation(runner, config)
+        super().__init__(runner, config, [from_step, self._js_expect])
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
             "properties": {
-                "json_schema": {
-                    "type": ["object", "boolean"],
+                "consume": {
+                    "oneOf": [
+                        {"type":"integer", "minimum": 0},
+                        {"type":"string", "const":"all"},
+                    ],
+                    "default": "all",
                 },
-                "count": {
-                    "type": "integer"
+                "timeoutSeconds": {
+                    "type": ["number", "null"],
+                    "default": None,
                 },
-                "exact": True,
+                "expect": {
+                    "type": "object",
+                    "properties": {
+                        "count": {
+                            "type": "integer",
+                        },
+                    },
+                },
             },
         }
 
+    def check_json(self, json_data:dict[str,Any]):
+        if not self._js_expect.check_against_json_schema(json_data):
+            raise expectations.ExpectationFailure("Data did not match json schema")
+
     def run(self):
+        if (timeoutSeconds := self._config.get('timeoutSeconds', None)) is not None:
+            timeout_time = datetime.now() + timedelta(seconds=timeoutSeconds)
         from_step = self.get_capability("FromStep").get_step()
         if from_step.has_capability("JsonMultiResponse"):
-            ...
+            json_multi = from_step.get_capability("JsonMultiResponse")
+            if expect := self._config.get('expect', dict()):
+                if (expect_count := expect.get('count', None)) is not None:
+                    while timeout_time is None or timeout_time > datetime.now():
+                        if expect_count == json_multi.count:
+                            break
+                        else:
+                            logger.debug("Waiting for message")
+                            sleep(1)
+                    else:
+                        raise expectations.ExpectationFailure(f"Expected {expect_count} messages, got {json_multi.count}")
+            consume_count = self._config.get('consume', 'all')
+            msg_getter = json_multi.get()
+            if consume_count == 'all':
+                consume_count = json_multi.count
+            for _ in range(consume_count):
+                json_msg = json_multi.get()
+                self.check_json(json_msg)
         elif from_step.has_capability("JsonResponseBody"):
-            ...
+            self.check_json(from_step.get_capability("JsonResponseBody").json_response_body)
         else:
             raise expectations.TestStepMissingCapability("No JsonMultiResponse or JsonResponseBody capability found")

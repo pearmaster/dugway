@@ -40,10 +40,11 @@ testCases:
         service: unsigned8_mqtt
         topic: hello/world
         json: hi
+        qos: 1
       - id: check_received_message
         type: mqtt_message
         from: subscribe_for_a_message
-        timeoutSeconds: 4
+        timeoutSeconds: 5
         expect:
           count: 1
           topic: hello/world

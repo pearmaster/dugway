@@ -2,6 +2,7 @@
 from typing import Any
 from abc import abstractmethod
 import os
+import expectations
 
 from jacobsjsondoc.document import create_document
 from stevedore import driver
@@ -27,7 +28,11 @@ class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
         return capability_name in self._capabilities
 
     def get_capability(self, capability_name: str) -> JsonSchemaDefinedCapability:
-        return self._capabilities[capability_name]
+        try:
+            cap = self._capabilities[capability_name]
+        except KeyError:
+            raise expectations.InvalidTestConfig("Capability not found")
+        return cap
 
     @classmethod
     def get_generic_schema(cls) -> JsonSchemaType:
