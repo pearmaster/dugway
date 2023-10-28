@@ -54,7 +54,7 @@ class JsonMultiResponseCapability(JsonSchemaDefinedCapability):
         return self._messages.qsize()
 
     def get(self) -> dict[str, Any]:
-        self._messages.get()
+        return self._messages.get()
 
     def get_or_none(self) -> dict[str, Any]|None:
         try:
@@ -67,6 +67,9 @@ class JsonMultiResponseCapability(JsonSchemaDefinedCapability):
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
+    
+    def __repr__(self) -> str:
+        return f"<Capability {self._name} {self._messages.qsize()} message count>"
 
 class ServiceDependency(JsonSchemaDefinedCapability):
 
@@ -113,6 +116,7 @@ class JsonSchemaExpectation(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__("JsonSchemaExpect", runner, config)
+        self.json_schema = self._config["expect"]["json_schema"]
     
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -123,7 +127,6 @@ class JsonSchemaExpectation(JsonSchemaDefinedCapability):
                     "properties": {
                         "json_schema": {"type":"object"},
                     },
-                    "required": ["json_schema"],
                 }
             },
         }
@@ -131,7 +134,7 @@ class JsonSchemaExpectation(JsonSchemaDefinedCapability):
     def check_against_json_schema(self, data: dict[str, Any]):
         if "expect" not in self._config and "json_schema" not in self._config["expect"]:
             return True
-        validator = JsonSchemaValidator(self._config["expect"]["json_schema"])
+        validator = JsonSchemaValidator(self.json_schema)
         try:
             validator.validate(data)
         except Exception as e:
@@ -153,7 +156,6 @@ class JsonSchemaFilter(JsonSchemaDefinedCapability):
                     "properties": {
                         "json_schema": {"type":"object"},
                     },
-                    "required": ["json_schema"],
                 }
             },
         }

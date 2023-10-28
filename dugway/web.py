@@ -61,7 +61,6 @@ class HttpService(Service):
 class HttpRequest(TestStep):
 
     def __init__(self, runner: TestRunner, config: JsonConfigType):
-        print("HttpRequest __init__")
         self.serv_dep = ServiceDependency(runner, config)
         json_resp_cap = JsonResponseBodyCapability(runner, config)
         super().__init__(runner, config, [self.serv_dep, json_resp_cap])
@@ -95,7 +94,6 @@ class HttpRequest(TestStep):
                             "type": "object",
                         }
                     },
-                    "additionalProperties": False,
                 }
             },
             "required": [

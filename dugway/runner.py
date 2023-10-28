@@ -3,8 +3,10 @@ from typing import Any
 from abc import abstractmethod
 import os
 import expectations
+import logging
 
 from jacobsjsondoc.document import create_document
+from jacobsjsondoc.options import ParseOptions, RefResolutionMode
 from stevedore import driver
 from jinja2 import Environment as Jinja2Environment
 
@@ -17,7 +19,6 @@ class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
         if capabilities is None:
             self._capabilities = dict()
         else:
-            print(f"{capabilities=}")
             self._capabilities = {cap.name: cap for cap in capabilities}
         super().__init__(config)
     
@@ -65,6 +66,7 @@ class Service(JsonSchemaDefinedObject):
     def __init__(self, runner, config: JsonConfigType, capabilities=[]):
         super().__init__(config=config, capabilities=capabilities)
         self._runner = runner
+        self._logger = logging.getLogger(__class__.__name__)
 
     @classmethod
     def get_generic_schema(cls) -> JsonSchemaType:
@@ -95,6 +97,7 @@ class TestStep(JsonSchemaDefinedObject):
     def __init__(self, runner: 'TestRunner', config: JsonConfigType, capabilities: list[JsonSchemaDefinedCapability]|None=None):
         super().__init__(config, capabilities)
         self._runner = runner
+        self._logger = logging.getLogger(__class__.__name__)
     
     def get_name(self, dfault:str=''):
         return self._config.get('id', dfault)
@@ -234,7 +237,9 @@ class TestSuite(JsonSchemaDefinedObject):
 class TestRunner:
 
     def __init__(self, filename):
-        self._config = create_document(uri=filename)
+        opts = ParseOptions()
+        opts.ref_resolution_mode = RefResolutionMode.RESOLVE_REFERENCES
+        self._config = create_document(uri=filename, options=opts)
         self.globals = {
             'env': os.environ,
         }
@@ -274,6 +279,7 @@ class TestRunner:
         self._suite.run()
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.ERROR)
     test_yaml = "examples/http_request.yaml"
     tr = TestRunner(test_yaml)
     tr.run()

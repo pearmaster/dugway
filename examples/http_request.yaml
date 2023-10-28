@@ -6,11 +6,40 @@ services:
   unsigned9_mqtt:
     type: mqtt
     hostname: '{{env.MQTT_HOSTNAME}}'
+    protocol: 5
   unsigned8_mqtt:
-    type: mqtt
-    hostname: '{{env.MQTT_HOSTNAME}}'
+    $ref: "#/services/unsigned9_mqtt"
 
 testCases:
+
+  mqttPingPong:
+    steps:
+      - id: subscribe_for_a_message
+        type: mqtt_subscribe
+        service: unsigned9_mqtt
+        topic: hello/world
+        filter:
+          publishProperties:
+            correlationData: "1234"
+      - id: mqtt_pub
+        type: mqtt_publish
+        service: unsigned8_mqtt
+        topic: hello/world
+        json: hi
+        qos: 1
+        publishProperties:
+          correlationData: "1234"
+      - id: check_received_message
+        type: mqtt_message
+        from: subscribe_for_a_message
+        timeoutSeconds: 5
+        expect:
+          count: 1
+          topic: hello/world
+          json_schema:
+            type: string
+            const: hi
+
   getACatFact:
     steps:
       - id: get_a_cat_fact
@@ -29,25 +58,3 @@ testCases:
             required:
               - fact
               - length
-  mqttPingPong:
-    steps:
-      - id: subscribe_for_a_message
-        type: mqtt_subscribe
-        service: unsigned9_mqtt
-        topic: hello/world
-      - id: mqtt_pub
-        type: mqtt_publish
-        service: unsigned8_mqtt
-        topic: hello/world
-        json: hi
-        qos: 1
-      - id: check_received_message
-        type: mqtt_message
-        from: subscribe_for_a_message
-        timeoutSeconds: 5
-        expect:
-          count: 1
-          topic: hello/world
-          json_schema:
-            type: string
-            const: hi

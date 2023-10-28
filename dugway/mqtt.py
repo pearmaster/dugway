@@ -13,6 +13,7 @@ from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 from runner import Service, TestStep, TestRunner
 from meta import JsonConfigType, JsonSchemaType
 from capabilities import (
+    JsonSchemaDefinedCapability,
     ServiceDependency,
     JsonMultiResponseCapability,
     FromStep,
@@ -22,6 +23,54 @@ from capabilities import (
 import expectations
 
 logger = logging.getLogger(__name__)
+
+class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
+
+    def __init__(self, runner, config: JsonConfigType, parent_json_property: str):
+        self._parent_json_property = parent_json_property
+        super().__init__("MqttProperties", runner, config)
+        
+    @classmethod
+    def publish_property_schema(cls) -> JsonSchemaType:
+        return {
+            "type": "object",
+            "properties": {
+                "payloadFormatIndicator": {"type": "integer", "minimum": 0, "maximum": 1},
+                "messageExpiryInterval": {"type": "integer"},
+                "responseTopic": {"type":"string"},
+                "correlationData": {"type":"string"},
+                "contentType": {"type":"string"},
+            },
+        }
+    
+    def get_config_schema(self) -> JsonSchemaType:
+        schema = {
+            "type": "object",
+            "properties": {
+                self._parent_json_property: self.publish_property_schema(),
+            },
+        }
+        return schema
+
+    def properties_match(self, pub_props) -> bool:
+        parent_obj = self._config.get(self._parent_json_property, dict())
+        if (expected_pub_props := parent_obj.get('publishProperties', False)) is not False:
+            if (p_f_i := expected_pub_props.get('payloadFormatIndicator', False)) is not False:
+                if p_f_i != pub_props.PayloadFormatIndicator:
+                    return False
+            if (m_e_i := expected_pub_props.get('messageExpiryInterval', False)) is not False:
+                if m_e_i != pub_props.MessageExpiryInterval:
+                    return False
+            if (r_t := expected_pub_props.get('responseTopic', False)) is not False:
+                if r_t != pub_props.ResponseTopic:
+                    return False
+            if (c_d := expected_pub_props.get('correlationData', False)) is not False:
+                if c_d.encode() != pub_props.CorrelationData:
+                    return False
+            if (c_t := expected_pub_props.get('contentType', False)) is not False:
+                if c_t != pub_props.ContentType:
+                    return False
+        return True
 
 class MqttService(Service):
 
@@ -117,7 +166,7 @@ class MqttService(Service):
                 connect_props.MaximumPacketSize = int(self._runner.template_eval(m_p_s))
             if len(prop_config) > 0:
                 kwargs['properties'] = connect_props
-        print(f"MQTT connecting with {args} {kwargs}")
+        self._logger.debug(f"MQTT connecting with {args} {kwargs}")
         self.client.connect(*args, **kwargs)
         self.client.loop_start()
     
@@ -159,20 +208,6 @@ class MqttPublish(TestStep):
         if config.get('nullPayload', False):
             self._payload = None
 
-    @staticmethod
-    def publish_property_schema() -> JsonSchemaType:
-        return {
-            "type": "object",
-            "properties": {
-                "payloadFormatIndicator": {"type": "integer", "minimum": 0, "maximum": 1},
-                "messageExpiryInterval": {"type": "integer"},
-                "responseTopic": {"type":"string"},
-                "correlationData": {"type":"string"},
-                "contentType": {"type":"string"},
-            },
-            "additionalProperties": False,
-        }
-
     def get_config_schema(self) -> JsonSchemaType:
         return {
             "properties": {
@@ -187,7 +222,7 @@ class MqttPublish(TestStep):
                     "type": "boolean",
                     "default": False
                 },
-                "publishProperties": self.publish_property_schema(),
+                "publishProperties": MqttPropertiesComparingCapability.publish_property_schema(),
             },
             "oneOf": [
                 {
@@ -222,26 +257,27 @@ class MqttPublish(TestStep):
         if mqtt_service.is_v5 and (pub_prop_config := self._config.get('publishProperties', False)):
             pub_props = props.Properties(PacketTypes.PUBLISH)
             if (p_f_i := pub_prop_config.get('payloadFormatIndicator', False)) is not False:
-                pub_props.PayloadFormatIndicator = p_f_i
+                pub_props.PayloadFormatIndicator = int(p_f_i)
             if (m_e_i := pub_prop_config.get('messageExpiryInterval', False)) is not False:
-                pub_props.MessageExpiryInterval = m_e_i
+                pub_props.MessageExpiryInterval = int(m_e_i)
             if (r_t := pub_prop_config.get('responseTopic', False)) is not False:
-                pub_props.ResponseTopic = r_t
+                pub_props.ResponseTopic = str(r_t)
             if (c_d := pub_prop_config.get('correlationData', False)) is not False:
-                pub_props.CorrelationData = c_d
+                pub_props.CorrelationData = c_d.encode()
             if (c_t := pub_prop_config.get('contentType', False)) is not False:
-                pub_props.ContentType = c_t
+                pub_props.ContentType = str(c_t)
             pub_args.append(pub_props)
-        print(f"Publishing {pub_args}")
         mqtt_service.publish(*pub_args)
+
 
 class MqttSubscribe(TestStep):
 
     def __init__(self, runner: TestRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
-        json_filter = JsonSchemaFilter(runner, config)
+        self._json_filter = JsonSchemaFilter(runner, config)
         self._json_multi = JsonMultiResponseCapability(runner, config)
-        super().__init__(runner, config, [serv_dep_cap, self._json_multi, json_filter])
+        self._mqtt_prop_comp = MqttPropertiesComparingCapability(runner, config, "filter")
+        super().__init__(runner, config, [serv_dep_cap, self._json_multi, self._json_filter])
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -253,38 +289,17 @@ class MqttSubscribe(TestStep):
                     "type": "integer",
                     "default": 0
                 },
-                "filter": {
-                    "type": "object",
-                    "properties": {
-                        "publishProperties": MqttPublish.publish_property_schema(),
-                    },
-                    "additionalProperties": False,
-                },
             }
         }
     
     def _receive_message(self, client: mqtt_client.Client, userdata: Any, message):
-        js_filter_cap = self.get_capability("JsonSchemaFilter")
-        if not js_filter_cap.check_against_json_schema(message.payload.decode('utf-8')):
+        self._logger.debug("Received message via %s", message.topic)
+        if not self._json_filter.check_against_json_schema(message.payload.decode('utf-8')):
+            self._logger.debug("Filtered out a message that didn't validate against json schema")
             return
-        filters = self._config.get('filter', dict())
-        if (expected_pub_props := filters.get('publishProperties', False)) is not False:
-            pub_props = message.properties
-            if (p_f_i := expected_pub_props.get('payloadFormatIndicator', False)) is not False:
-                if p_f_i != pub_props.PayloadFormatIndicator:
-                    return
-            if (m_e_i := expected_pub_props.get('messageExpiryInterval', False)) is not False:
-                if m_e_i != pub_props.MessageExpiryInterval:
-                    return
-            if (r_t := expected_pub_props.get('responseTopic', False)) is not False:
-                if r_t != pub_props.ResponseTopic:
-                    return
-            if (c_d := expected_pub_props.get('correlationData', False)) is not False:
-                if c_d != pub_props.CorrelationData:
-                    return
-            if (c_t := expected_pub_props.get('contentType', False)) is not False:
-                if c_t != pub_props.ContentType:
-                    return
+        if not self._mqtt_prop_comp.properties_match(message.properties):
+            self._logger.debug("Filtered out a message that didn't match MQTTv5 properties")
+            return
         self._json_multi.add_message(json.loads(message.payload.decode('utf-8')))
 
     def run(self):
@@ -326,7 +341,7 @@ class MqttMessage(TestStep):
 
     def check_json(self, json_data:dict[str,Any]):
         if not self._js_expect.check_against_json_schema(json_data):
-            raise expectations.ExpectationFailure("Data did not match json schema")
+            raise expectations.ExpectationFailure("Message payload did not match json schema")
 
     def run(self):
         if (timeoutSeconds := self._config.get('timeoutSeconds', None)) is not None:
@@ -345,7 +360,6 @@ class MqttMessage(TestStep):
                     else:
                         raise expectations.ExpectationFailure(f"Expected {expect_count} messages, got {json_multi.count}")
             consume_count = self._config.get('consume', 'all')
-            msg_getter = json_multi.get()
             if consume_count == 'all':
                 consume_count = json_multi.count
             for _ in range(consume_count):
