@@ -2,7 +2,7 @@
 from typing import Any
 from abc import abstractmethod
 import os
-import expectations
+from . import expectations
 import logging
 
 from jacobsjsondoc.document import create_document
@@ -10,8 +10,8 @@ from jacobsjsondoc.options import ParseOptions, RefResolutionMode
 from stevedore import driver
 from jinja2 import Environment as Jinja2Environment
 
-from meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType
-from capabilities import JsonSchemaDefinedCapability
+from .meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType
+from .capabilities import JsonSchemaDefinedCapability
 
 class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
 
@@ -280,6 +280,6 @@ class TestRunner:
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.ERROR)
-    test_yaml = "examples/http_request.yaml"
+    test_yaml = "examples/http_request.dugway.yaml"
     tr = TestRunner(test_yaml)
     tr.run()

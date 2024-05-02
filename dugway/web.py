@@ -4,10 +4,10 @@ from copy import copy
 import httpx
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from runner import Service, TestStep, TestRunner
-from meta import JsonSchemaType, JsonConfigType
-from capabilities import ServiceDependency, JsonResponseBodyCapability
-from expectations import ExpectationFailure
+from .runner import Service, TestStep, TestRunner
+from .meta import JsonSchemaType, JsonConfigType
+from .capabilities import ServiceDependency, JsonResponseBodyCapability
+from .expectations import ExpectationFailure
 
 class HttpService(Service):
 

@@ -10,9 +10,9 @@ import paho.mqtt.properties as props
 from paho.mqtt.packettypes import PacketTypes
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from runner import Service, TestStep, TestRunner
-from meta import JsonConfigType, JsonSchemaType
-from capabilities import (
+from .runner import Service, TestStep, TestRunner
+from .meta import JsonConfigType, JsonSchemaType
+from .capabilities import (
     JsonSchemaDefinedCapability,
     ServiceDependency,
     JsonMultiResponseCapability,
@@ -20,7 +20,7 @@ from capabilities import (
     JsonSchemaExpectation,
     JsonSchemaFilter,
 )
-import expectations
+from . import expectations
 
 logger = logging.getLogger(__name__)
 

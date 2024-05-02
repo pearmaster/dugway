@@ -4,7 +4,7 @@ from queue import Queue, Empty as QueueEmpty
 
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType
+from .meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType
 
 
 class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
