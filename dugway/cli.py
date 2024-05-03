@@ -1,10 +1,10 @@
 
-from .runner import TestRunner
+from .runner import DugwayRunner
 
 import typer
 
 def run(path:str):
-    tr = TestRunner(path)
+    tr = DugwayRunner(path)
     tr.run()
 
 

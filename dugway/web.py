@@ -4,7 +4,7 @@ from copy import copy
 import httpx
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from .runner import Service, TestStep, TestRunner
+from .runner import Service, TestStep, DugwayRunner
 from .meta import JsonSchemaType, JsonConfigType
 from .capabilities import ServiceDependency, JsonResponseBodyCapability
 from .expectations import ExpectationFailure
@@ -60,7 +60,7 @@ class HttpService(Service):
 
 class HttpRequest(TestStep):
 
-    def __init__(self, runner: TestRunner, config: JsonConfigType):
+    def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         self.serv_dep = ServiceDependency(runner, config)
         json_resp_cap = JsonResponseBodyCapability(runner, config)
         super().__init__(runner, config, [self.serv_dep, json_resp_cap])

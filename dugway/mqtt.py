@@ -10,7 +10,7 @@ import paho.mqtt.properties as props
 from paho.mqtt.packettypes import PacketTypes
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from .runner import Service, TestStep, TestRunner
+from .runner import Service, TestStep, DugwayRunner
 from .meta import JsonConfigType, JsonSchemaType
 from .capabilities import (
     JsonSchemaDefinedCapability,
@@ -74,7 +74,7 @@ class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
 
 class MqttService(Service):
 
-    def __init__(self, runner: TestRunner, config: JsonConfigType):
+    def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         super().__init__(runner, config)
         kwargs = dict()
         if client_id := config.get('clientId', False):
@@ -197,7 +197,7 @@ class MqttService(Service):
 
 class MqttPublish(TestStep):
 
-    def __init__(self, runner: TestRunner, config: JsonConfigType):
+    def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
         super().__init__(runner, config, [serv_dep_cap])
         self._topic = config.get('topic')
@@ -272,7 +272,7 @@ class MqttPublish(TestStep):
 
 class MqttSubscribe(TestStep):
 
-    def __init__(self, runner: TestRunner, config: JsonConfigType):
+    def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
         self._json_filter = JsonSchemaFilter(runner, config)
         self._json_multi = JsonMultiResponseCapability(runner, config)
@@ -309,7 +309,7 @@ class MqttSubscribe(TestStep):
 
 class MqttMessage(TestStep):
 
-    def __init__(self, runner: TestRunner, config: JsonConfigType):
+    def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         from_step = FromStep(runner, config)
         self._js_expect = JsonSchemaExpectation(runner, config)
         super().__init__(runner, config, [from_step, self._js_expect])

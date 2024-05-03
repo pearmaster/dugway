@@ -1,5 +1,5 @@
 
-from typing import Any
+from typing import Any, Tuple, Iterator
 from abc import abstractmethod
 import os
 from . import expectations
@@ -94,7 +94,7 @@ class Service(JsonSchemaDefinedObject):
 
 class TestStep(JsonSchemaDefinedObject):
     
-    def __init__(self, runner: 'TestRunner', config: JsonConfigType, capabilities: list[JsonSchemaDefinedCapability]|None=None):
+    def __init__(self, runner: 'DugwayRunner', config: JsonConfigType, capabilities: list[JsonSchemaDefinedCapability]|None=None):
         super().__init__(config, capabilities)
         self._runner = runner
         self._logger = logging.getLogger(__class__.__name__)
@@ -201,17 +201,30 @@ class TestSuite(JsonSchemaDefinedObject):
     def get_service(self, service_name: str) -> Service:
         return self._services[service_name]
 
-    def run(self):
+    def do_setup(self):
         for service in self._services.values():
             service.setup()
-        for case_name, test_case in self._cases.items():
-            print(f"Running test case: {case_name}")
-            self._current_case = test_case
-            test_case.run()
-            for service in self._services.values():
-                service.reset()
+
+    def do_teardown(self):
         for service in self._services.values():
             service.teardown()
+
+    def iterate_test_cases(self) -> Iterator[Tuple[str, TestCase]]:
+        for case_name, test_case in self._cases.items():
+            yield (case_name, test_case)
+
+    def do_test_case_execution(self, case_name: str, test_case: TestCase):
+        print(f"Running test case: {case_name}")
+        self._current_case = test_case
+        test_case.run()
+        for service in self._services.values():
+            service.reset()
+
+    def run(self):
+        self.do_setup()
+        for case_name, test_case in self.iterate_test_cases():
+            self.do_test_case_execution(case_name, test_case)
+        self.do_teardown()
 
     @classmethod
     def get_generic_schema(cls) -> JsonSchemaType:
@@ -234,7 +247,7 @@ class TestSuite(JsonSchemaDefinedObject):
         }
 
 
-class TestRunner:
+class DugwayRunner:
 
     def __init__(self, filename):
         opts = ParseOptions()
@@ -252,6 +265,9 @@ class TestRunner:
 
     def get_step(self, step_id: str):
         return self._suite._current_case.get_step(step_id)
+    
+    def get_suite(self) -> TestSuite:
+        return self._suite
 
     def template_eval(self, element: str|list[Any]|dict[str,Any], context:dict[str,Any]|None=None):
         if isinstance(element, str):
@@ -281,5 +297,5 @@ class TestRunner:
 if __name__ == '__main__':
     logging.basicConfig(level=logging.ERROR)
     test_yaml = "examples/http_request.dugway.yaml"
-    tr = TestRunner(test_yaml)
+    tr = DugwayRunner(test_yaml)
     tr.run()
