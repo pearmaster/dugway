@@ -16,7 +16,7 @@ WORKDIR /usr/local/src/dugway/
 COPY README.md .
 COPY pdm.lock .
 COPY pyproject.toml .
-COPY dugway .
+COPY src/dugway .
 RUN pdm install
 
 RUN mkdir -p /app
