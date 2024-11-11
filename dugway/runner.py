@@ -62,6 +62,15 @@ class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
         }
 
 class Service(JsonSchemaDefinedObject):
+    """ A service is a web server or MQTT broker or connection to something else.  
+    It is static, meaning that it is available to all the tests and test steps without
+    changing.
+
+    A test may have multiple services of same or varying types.
+
+    This is a base class.  More concrete classes, such as an MQTT connection service,
+    should inherit from this base class.
+    """
 
     def __init__(self, runner, config: JsonConfigType, capabilities=[]):
         super().__init__(config=config, capabilities=capabilities)
@@ -83,16 +92,33 @@ class Service(JsonSchemaDefinedObject):
         }
 
     def setup(self):
+        """ This is called once at the beginning of testing.  For example, to make a persistent connection
+        to a broker.
+        """
         pass
 
     def reset(self):
+        """ This is called between tests to reset any data.  For example, to clear cookies or subscriptions.
+        """
         pass
 
     def teardown(self):
+        """ This is called at the end of testing.  For example, to disconnect a persistent connection.
+        """
         pass
 
 
 class TestStep(JsonSchemaDefinedObject):
+    """ A test case is made up of 1+ test steps.  A test step is an individual bit of instruction to do something.
+    Test steps are performed sequentially.  
+    
+    Some test steps maintain a dynamic state after the step is performed.
+    For example, and MQTT subscriptiopn test step may continue to receive messages even though subsequent steps
+    are being performed.  This is what differentiates a Dugway test from other test frameworks.
+
+    Subsequent test steps can reference previous ones.  For example a "message received" test step may
+    find received messages from a previous "subscribe to messages" test step.
+    """
     
     def __init__(self, runner: 'DugwayRunner', config: JsonConfigType, capabilities: list[JsonSchemaDefinedCapability]|None=None):
         super().__init__(config, capabilities)
@@ -123,6 +149,10 @@ class TestStep(JsonSchemaDefinedObject):
         ...
 
 class TestCase(JsonSchemaDefinedObject):
+    """ A test suite is made up of 1+ test cases.  Each test case contains 1+ test steps.
+    If all the test steps in a test case are successful, then the test case passes, otherwise
+    it fails.
+    """
 
     def __init__(self, name: str, runner, config: JsonConfigType):
         super().__init__(config)
@@ -169,6 +199,9 @@ class TestCase(JsonSchemaDefinedObject):
         }
 
 class TestSuite(JsonSchemaDefinedObject):
+    """ In Dugway, a TestSuite is the largest component, being defined by a JSON/YAML file.
+    A TestSuite contains 1+ services and 1+ test cases.
+    """
 
     def __init__(self, name: str, runner, config: dict[str, Any]):
         super().__init__(config)
