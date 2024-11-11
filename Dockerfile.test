@@ -23,4 +23,4 @@ RUN mkdir -p /app
 WORKDIR /app
 COPY self_tests/ .
 
-
+CMD [ "/bin/bash" ]

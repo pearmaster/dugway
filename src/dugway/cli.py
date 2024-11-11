@@ -2,7 +2,7 @@
 from .runner import DugwayRunner
 
 import typer
-
+cat 
 def run(path:str):
     tr = DugwayRunner(path)
     tr.run()

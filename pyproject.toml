@@ -25,8 +25,8 @@ license = {text = "Apache License 2.0"}
 dugway = "dugway.cli:entrypoint"
 
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project.entry-points.dugwayservice]
 http = 'dugway.web:HttpService'
@@ -41,3 +41,5 @@ mqtt_message = 'dugway.mqtt:MqttMessage'
 [project.entry-points.pytest11]
 dugway = 'dugway.pytest_plugin'
 
+[project.urls]
+Repository = "https://github.com/pearmaster/dugway"
