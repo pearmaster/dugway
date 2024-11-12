@@ -16,7 +16,7 @@ WORKDIR /usr/local/src/dugway/
 COPY README.md .
 COPY pdm.lock .
 COPY pyproject.toml .
-COPY src/dugway .
+COPY src .
 RUN pdm install
 RUN pdm build
 RUN python3 -m pip install dist/dugway-0.1.0-py3-none-any.whl --break-system-packages
