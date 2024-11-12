@@ -1,0 +1,30 @@
+services:
+  local_mqtt:
+    type: mqtt
+    hostname: 'localhost'
+    protocol: 5
+
+testCases:
+
+  mqttPingPong:
+    steps:
+      - id: subscribe_for_a_message
+        type: mqtt_subscribe
+        service: local_mqtt
+        topic: hello/pong
+      - id: mqtt_pub
+        type: mqtt_publish
+        service: local_mqtt
+        topic: hello/ping
+        json: hi
+        qos: 1
+      - id: check_received_message
+        type: mqtt_message
+        from: subscribe_for_a_message
+        timeoutSeconds: 5
+        expect:
+          count: 1
+          topic: hello/pong
+          json_schema:
+            type: string
+            const: hi
