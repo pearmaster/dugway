@@ -2,7 +2,6 @@
 from typing import Any, Tuple, Iterator
 from abc import abstractmethod
 import os
-from . import expectations
 import logging
 
 from jacobsjsondoc.document import create_document
@@ -12,6 +11,7 @@ from jinja2 import Environment as Jinja2Environment
 
 from .meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType
 from .capabilities import JsonSchemaDefinedCapability
+from . import expectations
 
 class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
 
@@ -283,6 +283,7 @@ class TestSuite(JsonSchemaDefinedObject):
 class DugwayRunner:
 
     def __init__(self, filename):
+        print(f"Loading test suite from: {filename}")
         opts = ParseOptions()
         opts.ref_resolution_mode = RefResolutionMode.RESOLVE_REFERENCES
         self._config = create_document(uri=filename, options=opts)
