@@ -35,6 +35,13 @@ class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
             raise expectations.InvalidTestConfig("Capability not found")
         return cap
 
+    def find_capability(self, capability_name: str) -> JsonSchemaDefinedCapability|None:
+        try:
+            cap = self._capabilities[capability_name]
+        except KeyError:
+            return None
+        return cap
+
     @classmethod
     def get_generic_schema(cls) -> JsonSchemaType:
         return True

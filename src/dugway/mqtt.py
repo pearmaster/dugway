@@ -300,7 +300,11 @@ class MqttSubscribe(TestStep):
         if not self._mqtt_prop_comp.properties_match(message.properties):
             self._logger.debug("Filtered out a message that didn't match MQTTv5 properties")
             return
-        self._json_multi.add_message(json.loads(message.payload.decode('utf-8')))
+        try:
+            deserialized_json = json.loads(message.payload)
+        except json.decoder.JSONDecodeError:
+            raise expectations.ExpectationFailure("Message {message.payload} was not JSON like expected")
+        self._json_multi.add_message(deserialized_json)
 
     def run(self):
         mqtt_service = self.get_capability("ServiceDependency").get_service()
@@ -347,8 +351,7 @@ class MqttMessage(TestStep):
         if (timeoutSeconds := self._config.get('timeoutSeconds', None)) is not None:
             timeout_time = datetime.now() + timedelta(seconds=timeoutSeconds)
         from_step = self.get_capability("FromStep").get_step()
-        if from_step.has_capability("JsonMultiResponse"):
-            json_multi = from_step.get_capability("JsonMultiResponse")
+        if json_multi := from_step.find_capability("JsonMultiResponse"):
             if expect := self._config.get('expect', dict()):
                 if (expect_count := expect.get('count', None)) is not None:
                     while timeout_time is None or timeout_time > datetime.now():
@@ -358,14 +361,16 @@ class MqttMessage(TestStep):
                             logger.debug("Waiting for message")
                             sleep(1)
                     else:
-                        raise expectations.ExpectationFailure(f"Expected {expect_count} messages, got {json_multi.count}")
+                        failure = expectations.ExpectationFailure(f"Expected {expect_count} messages, got {json_multi.count}")
+                        print(from_step)
+                        raise failure
             consume_count = self._config.get('consume', 'all')
             if consume_count == 'all':
                 consume_count = json_multi.count
             for _ in range(consume_count):
                 json_msg = json_multi.get()
                 self.check_json(json_msg)
-        elif from_step.has_capability("JsonResponseBody"):
-            self.check_json(from_step.get_capability("JsonResponseBody").json_response_body)
+        elif js_resp_bod := from_step.find_capability("JsonResponseBody"):
+            self.check_json(js_resp_bod.json_response_body)
         else:
             raise expectations.TestStepMissingCapability("No JsonMultiResponse or JsonResponseBody capability found")
