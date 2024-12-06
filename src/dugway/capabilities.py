@@ -42,6 +42,22 @@ class JsonResponseBodyCapability(JsonSchemaDefinedCapability):
     def get_config_schema(self) -> JsonSchemaType:
         return True
 
+class TextualResponseBodyCapability(JsonSchemaDefinedCapability):
+
+    def __init__(self, runner, config: JsonConfigType):
+        super().__init__("TextualResponseBody", runner, config)
+        self._response_body: str|None = None
+
+    @property
+    def response_body(self) -> str|None:
+        return self._response_body
+    
+    @response_body.setter
+    def response_body(self, resp_body: str):
+        self._response_body = resp_body
+
+    def get_config_schema(self) -> JsonSchemaType:
+        return True
 
 class JsonMultiResponseCapability(JsonSchemaDefinedCapability):
 
@@ -70,6 +86,7 @@ class JsonMultiResponseCapability(JsonSchemaDefinedCapability):
     
     def __repr__(self) -> str:
         return f"<Capability {self._name} {self._messages.qsize()} message count>"
+
 
 class ServiceDependency(JsonSchemaDefinedCapability):
 

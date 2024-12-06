@@ -1,7 +1,11 @@
 
 from typing import Any
 from abc import ABC, abstractmethod
-from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
+from jacobsjsonschema.draft7 import (
+    Validator as JsonSchemaValidator,
+    JsonSchemaValidationError
+)
+from .expectations import InvalidTestConfig
 
 JsonConfigType = dict[str,Any]
 JsonSchemaType = bool|dict[str,Any]
@@ -27,5 +31,8 @@ class JsonSchemaDefinedClass(ABC):
         """ Checks that the config confirms to the schema.
         """
         validator = JsonSchemaValidator(self.get_config_schema())
-        validator.validate(config) # Throws exceptions if invalid
+        try:
+            validator.validate(config) # Throws exceptions if invalid
+        except JsonSchemaValidationError as e:
+            raise InvalidTestConfig(f"Invalid test config: {e}")
         return True

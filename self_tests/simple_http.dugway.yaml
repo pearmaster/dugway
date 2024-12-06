@@ -1,0 +1,29 @@
+services:
+  joke_api:
+    type: http
+    hostname: 'v2.jokeapi.dev'
+
+testCases:
+
+  get_a_joke:
+    steps:
+      - id: request_joke
+        type: http_request
+        service: joke_api
+        path: /joke/Any
+      - id: convert_to_json
+        type: json
+        from: request_joke
+        expect:
+          json_schema:
+            type: object
+            properties:
+              setup:
+                type: string
+              delivery:
+                type: string
+              id:
+                type: integer
+            required:
+              - setup
+              - delivery

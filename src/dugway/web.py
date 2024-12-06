@@ -4,9 +4,10 @@ from copy import copy
 import httpx
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from .runner import Service, TestStep, DugwayRunner
+from .step import TestStep
+from .runner import Service, DugwayRunner
 from .meta import JsonSchemaType, JsonConfigType
-from .capabilities import ServiceDependency, JsonResponseBodyCapability
+from .capabilities import ServiceDependency, TextualResponseBodyCapability
 from .expectations import ExpectationFailure
 
 class HttpService(Service):
@@ -62,8 +63,8 @@ class HttpRequest(TestStep):
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         self.serv_dep = ServiceDependency(runner, config)
-        json_resp_cap = JsonResponseBodyCapability(runner, config)
-        super().__init__(runner, config, [self.serv_dep, json_resp_cap])
+        resp_cap = TextualResponseBodyCapability(runner, config)
+        super().__init__(runner, config, [self.serv_dep, resp_cap])
         self._path = config.get('path')
         self._method = config.get('method', 'GET')
         self._expectations = config.get('expect', dict())
@@ -110,7 +111,4 @@ class HttpRequest(TestStep):
         )
         if resp.status_code != self._expectations.get('status_code', resp.status_code):
             raise ExpectationFailure("Status code failure")
-        if schema := self._expectations.get('json_schema', False):
-            validator = JsonSchemaValidator(schema)
-            validator.validate(resp.json()) # Throws exceptions if invalid
-        self.get_capability("JsonResponseBody").json_response_body = resp.json()
+        self.get_capability("TextualResponseBody").response_body = resp.text
