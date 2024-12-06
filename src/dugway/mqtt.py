@@ -10,7 +10,8 @@ import paho.mqtt.properties as props
 from paho.mqtt.packettypes import PacketTypes
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from .runner import Service, TestStep, DugwayRunner
+from .runner import Service, DugwayRunner
+from .step import TestStep
 from .meta import JsonConfigType, JsonSchemaType
 from .capabilities import (
     JsonSchemaDefinedCapability,

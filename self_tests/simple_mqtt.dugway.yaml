@@ -12,12 +12,18 @@ testCases:
         type: mqtt_subscribe
         service: local_mqtt
         topic: hello/pong
+      - id: sleep1
+        type: sleep
+        time: 2
       - id: mqtt_pub
         type: mqtt_publish
         service: local_mqtt
         topic: hello/ping
         json: hi
         qos: 1
+      - id: sleep2
+        type: sleep
+        time: 2
       - id: check_received_message
         type: mqtt_message
         from: subscribe_for_a_message
@@ -28,3 +34,9 @@ testCases:
           json_schema:
             type: string
             const: hi
+
+  finishUp:
+    steps:
+      - id: sleep
+        type: sleep
+        time: 2
