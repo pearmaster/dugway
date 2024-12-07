@@ -12,6 +12,8 @@ testCases:
         service: joke_api
         path: /joke/Any
         follow_redirects: false
+        expect:
+          status_code: 200
       - id: convert_to_json
         type: json
         from: request_joke

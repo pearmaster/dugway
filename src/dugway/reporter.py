@@ -16,6 +16,8 @@ from rich.table import Table
 from rich.syntax import Syntax
 from rich import print
 
+from .expectations import FailedTestStep, ExpectationFailure
+
 class AbstractReporter(ABC):
 
     @abstractmethod
@@ -107,12 +109,15 @@ def create_rich_text(data:str):
         return Syntax(data, "text", line_numbers=True)
     return data
 
-def create_rich_panel(title:str, data:str|dict[str,str]|list[str|dict[str,str]]|None=None, error_panel:bool=False) -> Panel|Text|Table:
+def create_rich_panel(title:str, data:str|dict[str,str]|list[str|dict[str,str]]|FailedTestStep|None=None, error_panel:bool=False) -> Panel|Text|Table:
+    kwargs = dict()
+    if error_panel:
+        kwargs['style'] = "red"
     if data is None:
         return Text(title)
     else:
         if isinstance(data, str):
-            return Panel(create_rich_text(data), title=title, width=80)
+            return Panel(create_rich_text(data), title=title, width=80, **kwargs)
         elif isinstance(data, dict):
             table = create_rich_table(data)
         elif isinstance(data, list):
@@ -172,7 +177,7 @@ class RichReporter(AbstractReporter):
         self.current_step_tree.add(create_rich_panel(title, data))
 
     def step_failure(self, title, data=None):
-        self.current_step_tree.add(create_rich_panel(str(type(data)), str(data), error_panel=True))
+        self.current_step_tree.add(create_rich_panel(str(data.__class__), str(data), error_panel=True))
         self.display.refresh()
         self.end_step(False)
 

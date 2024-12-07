@@ -304,7 +304,7 @@ class MqttSubscribe(TestStep):
         try:
             deserialized_json = json.loads(message.payload)
         except json.decoder.JSONDecodeError:
-            raise expectations.ExpectationFailure("Message {message.payload} was not JSON like expected")
+            raise expectations.ExpectationFailure("Message Format", "JSON Formatted Message". message.payload)
         self._json_multi.add_message(deserialized_json)
 
     def run(self):
@@ -346,7 +346,7 @@ class MqttMessage(TestStep):
 
     def check_json(self, json_data:dict[str,Any]):
         if not self._js_expect.check_against_json_schema(json_data):
-            raise expectations.ExpectationFailure("Message payload did not match json schema")
+            raise expectations.FailedTestStep("Message payload did not match the JSON schema")
 
     def run(self):
         if (timeoutSeconds := self._config.get('timeoutSeconds', None)) is not None:
@@ -362,7 +362,7 @@ class MqttMessage(TestStep):
                             logger.debug("Waiting for message")
                             sleep(1)
                     else:
-                        failure = expectations.ExpectationFailure(f"Expected {expect_count} messages, got {json_multi.count}")
+                        failure = expectations.ExpectationFailure(f"Message count", expect_count, json_multi.count)
                         print(from_step)
                         raise failure
             consume_count = self._config.get('consume', 'all')

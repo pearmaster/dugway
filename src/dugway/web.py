@@ -120,6 +120,7 @@ class HttpRequest(TestStep):
             follow_redirects=self._config.get('follow_redirects', True)
         )
         self._runner._reporter.step_info(f"{resp.status_code} Response", resp.text)
-        if resp.status_code != self._expectations.get('status_code', resp.status_code):
-            raise ExpectationFailure("Status code failure")
+        if expected_status_code := self._expectations.get('status_code'):
+            if resp.status_code != expected_status_code:
+                raise ExpectationFailure("Status code", expected_status_code, resp.status_code)
         self.get_capability("TextualResponseBody").response_body = resp.text
