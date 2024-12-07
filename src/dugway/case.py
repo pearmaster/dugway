@@ -44,12 +44,18 @@ class TestCase(JsonSchemaDefinedObject):
     def get_step(self, step_id: str) -> TestStep:
         return self._steps_by_id[step_id]
 
-    def run(self):
+    def run(self) -> bool:
         for i, test_step in enumerate(self._steps):
             self._current_step = test_step
             self._reporter.start_step(test_step.get_name(dfault=str(i)))
-            test_step.run()
-            self._reporter.end_step(True)
+            try:
+                test_step.run()
+            except Exception as e:
+                self._reporter.step_failure("Exception", e)
+                return False
+            else:
+                self._reporter.end_step(True)
+        return True
 
     @classmethod
     def get_generic_schema(cls) -> JsonSchemaType:

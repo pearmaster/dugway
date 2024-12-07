@@ -48,12 +48,15 @@ class HttpService(Service):
             ],
         }
     
+    def get_url(self, path: str) -> str:
+        evaluated_path = self._runner.template_eval(path)
+        url = f"http{self._tls and 's' or ''}://{self._hostname}:{self._port}{evaluated_path}"
+        return url
+
     def make_request(self, method: str, path: str, **httpx_kwargs):
         all_headers = copy(self._headers)
         all_headers.update({ k:self._runner.template_eval(v) for (k,v) in httpx_kwargs.get('headers', dict())})
-        evaluated_path = self._runner.template_eval(path)
-        url = f"http{self._tls and 's' or ''}://{self._hostname}:{self._port}{evaluated_path}"
-        print(url)
+        url = self.get_url(path)
         httpx_kwargs['headers'] = all_headers
         resp = httpx.request(method, url, **httpx_kwargs)
         return resp
@@ -83,6 +86,10 @@ class HttpRequest(TestStep):
                 "path": {
                     "type": "string",
                 },
+                "follow_redirects": {
+                    "type": "boolean",
+                    "default": True
+                },
                 "expect": {
                     "type": "object",
                     "properties": {
@@ -104,11 +111,15 @@ class HttpRequest(TestStep):
     
     def run(self):
         http_service = self.serv_dep.get_service()
+        method = self._config.get('method', 'GET')
+        self._runner._reporter.step_info(f"{method} Request", http_service.get_url(self._path))
         resp = http_service.make_request(
-            self._config.get('method', 'GET'),
+            method,
             self._path,
             headers=self._config.get('headers', dict()),
+            follow_redirects=self._config.get('follow_redirects', True)
         )
+        self._runner._reporter.step_info(f"{resp.status_code} Response", resp.text)
         if resp.status_code != self._expectations.get('status_code', resp.status_code):
             raise ExpectationFailure("Status code failure")
         self.get_capability("TextualResponseBody").response_body = resp.text

@@ -11,6 +11,9 @@ from rich.text import Text
 from rich.emoji import Emoji
 from rich.progress_bar import ProgressBar
 from rich.columns import Columns
+from rich.panel import Panel
+from rich.table import Table
+from rich.syntax import Syntax
 from rich import print
 
 class AbstractReporter(ABC):
@@ -33,12 +36,17 @@ class AbstractReporter(ABC):
     def start_step(self, step_name: str):
         ...
 
+    def step_info(self, title, data):
+        ...
+
     def end_step(self, result: bool):
         ...
 
     def add_service(self, service_name):
         ...
 
+    def step_failure(self, title, data):
+        ...
 
 class MultiReporter:
 
@@ -65,27 +73,52 @@ class MultiReporter:
         for reporter in self.reporters:
             reporter.start_step(step_name)
 
-
 class MyRichStatus:
 
-    def __init__(self, text):
+    def __init__(self, status_type, text):
         self._text = text
+        self._status_type = status_type
         self.done = False
         self.failed = False
     
     def r(self):
         if self.done:
             if self.failed:
-                return Text.from_markup(f":x: {self._text}")
+                return Text.from_markup(f":x: [bold blue]{self._status_type}[/bold blue]: [red]{self._text}[/red]")
             else:
-                return Text.from_markup(f":white_heavy_check_mark: {self._text}")
+                return Text.from_markup(f":white_heavy_check_mark: [bold blue]{self._status_type}[/bold blue]: [green]{self._text}[/green]")
         else:
-            return Spinner("dots", self._text)
+            return Spinner("dots", f"[bold blue]{self._status_type}[/bold blue]: {self._text}")
     
     def finish(self, failed=False):
         self.failed = failed
         self.done = True
         return self.r()
+    
+
+def create_rich_table(data:dict[str,str]) -> Table:
+    table = Table()
+    for k,v in data.items():
+        table.add_row(k, v)
+    return table
+
+def create_rich_text(data:str):
+    if '\n' in data:
+        return Syntax(data, "text", line_numbers=True)
+    return data
+
+def create_rich_panel(title:str, data:str|dict[str,str]|list[str|dict[str,str]]|None=None, error_panel:bool=False) -> Panel|Text|Table:
+    if data is None:
+        return Text(title)
+    else:
+        if isinstance(data, str):
+            return Panel(create_rich_text(data), title=title, width=80)
+        elif isinstance(data, dict):
+            table = create_rich_table(data)
+        elif isinstance(data, list):
+            ...
+
+
 
 class RichReporter(AbstractReporter):
 
@@ -110,7 +143,7 @@ class RichReporter(AbstractReporter):
             self.current_suite_tree.add(spinner)
 
     def start_suite(self, suite_name):
-        self.current_suite_spinner = MyRichStatus(f"Suite: {suite_name}")
+        self.current_suite_spinner = MyRichStatus("Suite", suite_name)
         self.current_suite_tree = Tree(self.current_suite_spinner.r())
         for svc in self.services:
             self.current_suite_tree.add(svc)
@@ -122,7 +155,7 @@ class RichReporter(AbstractReporter):
         self.display.refresh()
 
     def start_case(self, case_name: str, number_of_cases: int|None=None):
-        self.current_case_spinner = MyRichStatus(f"Case: {case_name}")
+        self.current_case_spinner = MyRichStatus("Case", case_name)
         self.current_case_tree = self.current_suite_tree.add(self.current_case_spinner.r())
 
     def end_case(self, result):
@@ -132,9 +165,17 @@ class RichReporter(AbstractReporter):
         self.display.refresh()
 
     def start_step(self, step_name):
-        self.current_step_spinner = MyRichStatus(step_name)
+        self.current_step_spinner = MyRichStatus("Step", step_name)
         self.current_step_tree = self.current_case_tree.add(self.current_step_spinner.r())
     
+    def step_info(self, title, data):
+        self.current_step_tree.add(create_rich_panel(title, data))
+
+    def step_failure(self, title, data=None):
+        self.current_step_tree.add(create_rich_panel(str(type(data)), str(data), error_panel=True))
+        self.display.refresh()
+        self.end_step(False)
+
     def end_step(self, result):
         self.current_step_tree.label = self.current_step_spinner.finish(failed=(not result))
         self.display.refresh()

@@ -114,19 +114,22 @@ class TestSuite(JsonSchemaDefinedObject):
     def do_test_case_execution(self, case_name: str, test_case: TestCase):
         self._reporter.start_case(case_name)
         self._current_case = test_case
-        test_case.run()
+        result = test_case.run()
         for service in self._services.values():
             service.reset()
-        self._reporter.end_case(True)
+        self._reporter.end_case(result)
 
-    def run(self):
+    def run(self) -> bool:
         self._reporter.start_suite(self._name)
         print(f"starting suite with {len(self._services)} services")
         self.do_setup()
+        result = True
         for case_name, test_case in self.iterate_test_cases():
-            self.do_test_case_execution(case_name, test_case)
+            if not self.do_test_case_execution(case_name, test_case):
+                result = False
         self.do_teardown()
-        self._reporter.end_suite(True)
+        self._reporter.end_suite(result)
+        return result
 
     @classmethod
     def get_generic_schema(cls) -> JsonSchemaType:

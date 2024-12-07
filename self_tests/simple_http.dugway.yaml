@@ -11,6 +11,7 @@ testCases:
         type: http_request
         service: joke_api
         path: /joke/Any
+        follow_redirects: false
       - id: convert_to_json
         type: json
         from: request_joke
