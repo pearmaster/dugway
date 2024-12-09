@@ -1,6 +1,7 @@
 
 from abc import ABC, abstractmethod
 from functools import partial
+from io import StringIO
 
 import junit_xml
 from rich.tree import Tree
@@ -15,6 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
 from rich import print
+from protobuf_inspector.types import StandardParser as ProtobufParser
 
 from .expectations import FailedTestStep, ExpectationFailure
 
@@ -107,6 +109,8 @@ def create_rich_table(data:dict[str,str]) -> Table:
 def create_rich_text(data:str):
     if '\n' in data:
         return Syntax(data, "text", line_numbers=True)
+    elif inspectedpb := try_display_raw_protobuf(data):
+        return Text(inspectedpb)
     return data
 
 def create_rich_panel(title:str, data:str|dict[str,str]|list[str|dict[str,str]]|FailedTestStep|None=None, error_panel:bool=False) -> Panel|Text|Table:
@@ -123,7 +127,14 @@ def create_rich_panel(title:str, data:str|dict[str,str]|list[str|dict[str,str]]|
         elif isinstance(data, list):
             ...
 
-
+def try_display_raw_protobuf(data) -> str|None:
+    parser = ProtobufParser()
+    f = StringIO(data)
+    try:
+        output = parser.parse_message(f, "message")
+        return output
+    except Exception:
+        return None
 
 class RichReporter(AbstractReporter):
 
