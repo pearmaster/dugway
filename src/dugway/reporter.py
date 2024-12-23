@@ -224,3 +224,17 @@ class JunitReporter(AbstractReporter):
     
     def start_step(self, step_name):
         pass
+
+if __name__ == '__main__':
+    rr = RichReporter()
+    rr.start_suite("This is the test suite")
+    rr.start_case("This is the test case name")
+    rr.start_step("Hello")
+    rr.step_info("String", "This is some text")
+    rr.step_info("Multiline", "Line one\nLine two\nLine three")
+    #rr.step_info("List", ["Thing One", "Thing Two", "Thing Three"])
+    rr.end_step(True)
+    rr.start_step("Goodbye")
+    rr.end_step(False)
+    rr.end_case(False)
+    rr.end_suite(False)

@@ -22,7 +22,7 @@ class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
         return f"<Capability {self._name}>"
 
 
-class JsonResponseBodyCapability(JsonSchemaDefinedCapability):
+class JsonContentCapability(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__("JsonResponseBody", runner, config)
@@ -42,10 +42,10 @@ class JsonResponseBodyCapability(JsonSchemaDefinedCapability):
     def get_config_schema(self) -> JsonSchemaType:
         return True
 
-class TextualResponseBodyCapability(JsonSchemaDefinedCapability):
+class TextContentCapability(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("TextualResponseBody", runner, config)
+        super().__init__("TextContent", runner, config)
         self._response_body: str|None = None
 
     @property
@@ -59,10 +59,39 @@ class TextualResponseBodyCapability(JsonSchemaDefinedCapability):
     def get_config_schema(self) -> JsonSchemaType:
         return True
 
-class JsonMultiResponseCapability(JsonSchemaDefinedCapability):
+
+class TextMultiContentCapability(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("JsonMultiResponse", runner, config)
+        super().__init__("TextMultiContent", runner, config)
+        self._messages = Queue()
+
+    @property
+    def count(self):
+        return self._messages.qsize()
+
+    def get(self) -> str:
+        return self._messages.get()
+
+    def get_or_none(self) -> str|None:
+        try:
+            self._messages.get_nowait()
+        except QueueEmpty:
+            return None
+
+    def add_content(self, content: str):
+        self._messages.put(content)
+
+    def get_config_schema(self) -> JsonSchemaType:
+        return True
+    
+    def __repr__(self) -> str:
+        return f"<TextMultiContent {self._name} {self._messages.qsize()} message count>"
+
+class JsonMultiContentCapability(JsonSchemaDefinedCapability):
+
+    def __init__(self, runner, config: JsonConfigType):
+        super().__init__("JsonMultiContent", runner, config)
         self._messages = Queue()
 
     @property
@@ -78,15 +107,66 @@ class JsonMultiResponseCapability(JsonSchemaDefinedCapability):
         except QueueEmpty:
             return None
 
-    def add_message(self, json_resp: dict[str, Any]):
+    def add_content(self, json_resp: dict[str, Any]):
         self._messages.put(json_resp)
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
     
     def __repr__(self) -> str:
-        return f"<Capability {self._name} {self._messages.qsize()} message count>"
+        return f"<JsonMultiContent {self._name} {self._messages.qsize()} message count>"
 
+class ValueCapability(JsonSchemaDefinedCapability):
+
+    def __init__(self, runner, config: JsonConfigType):
+        super().__init__("Value", runner, config)
+        self._value = None
+        self._is_set = False
+
+    def get(self) -> Any|None:
+        return self._value
+    
+    def set(self, value: Any):
+        self._value = value
+        self._is_set = True
+    
+    @property
+    def is_set(self) -> bool:
+        return self._was_set
+
+    def get_config_schema(self) -> JsonSchemaType:
+        return True
+    
+    def __repr__(self) -> str:
+        return f"<Value {self._value}>"
+
+class MultiValueCapability(JsonSchemaDefinedCapability):
+
+    def __init__(self, runner, config: JsonConfigType):
+        super().__init__("MultiValue", runner, config)
+        self._value = Queue()
+
+    @property
+    def count(self):
+        return self._value.qsize()
+
+    def get(self) -> Any:
+        return self._value.get()
+
+    def get_or_none(self) -> Any|None:
+        try:
+            self._value.get_nowait()
+        except QueueEmpty:
+            return None
+
+    def add_content(self, value: Any):
+        self._value.put(value)
+
+    def get_config_schema(self) -> JsonSchemaType:
+        return True
+    
+    def __repr__(self) -> str:
+        return f"<MultiValue {self._name} {self._messages.qsize()} message count>"
 
 class ServiceDependency(JsonSchemaDefinedCapability):
 
@@ -106,7 +186,6 @@ class ServiceDependency(JsonSchemaDefinedCapability):
 
     def get_service(self):
         return self._runner.get_service(self._config.get('service'))
-    
 
 class FromStep(JsonSchemaDefinedCapability):
 

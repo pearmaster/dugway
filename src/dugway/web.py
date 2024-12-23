@@ -5,9 +5,10 @@ import httpx
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
 from .step import TestStep
-from .runner import Service, DugwayRunner
+from .runner import DugwayRunner
+from .service import Service
 from .meta import JsonSchemaType, JsonConfigType
-from .capabilities import ServiceDependency, TextualResponseBodyCapability
+from .capabilities import ServiceDependency, TextContentCapability
 from .expectations import ExpectationFailure
 
 class HttpService(Service):
@@ -66,7 +67,7 @@ class HttpRequest(TestStep):
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         self.serv_dep = ServiceDependency(runner, config)
-        resp_cap = TextualResponseBodyCapability(runner, config)
+        resp_cap = TextContentCapability(runner, config)
         super().__init__(runner, config, [self.serv_dep, resp_cap])
         self._path = config.get('path')
         self._method = config.get('method', 'GET')
@@ -123,4 +124,4 @@ class HttpRequest(TestStep):
         if expected_status_code := self._expectations.get('status_code'):
             if resp.status_code != expected_status_code:
                 raise ExpectationFailure("Status code", expected_status_code, resp.status_code)
-        self.get_capability("TextualResponseBody").response_body = resp.text
+        self.get_capability("TextContent").response_body = resp.text

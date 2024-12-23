@@ -10,13 +10,14 @@ import paho.mqtt.properties as props
 from paho.mqtt.packettypes import PacketTypes
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from .runner import Service, DugwayRunner
+from .runner import DugwayRunner
+from .service import Service
 from .step import TestStep
 from .meta import JsonConfigType, JsonSchemaType
 from .capabilities import (
     JsonSchemaDefinedCapability,
     ServiceDependency,
-    JsonMultiResponseCapability,
+    JsonMultiContent,
     FromStep,
     JsonSchemaExpectation,
     JsonSchemaFilter,
@@ -276,7 +277,7 @@ class MqttSubscribe(TestStep):
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
         self._json_filter = JsonSchemaFilter(runner, config)
-        self._json_multi = JsonMultiResponseCapability(runner, config)
+        self._json_multi = JsonMultiContent(runner, config)
         self._mqtt_prop_comp = MqttPropertiesComparingCapability(runner, config, "filter")
         super().__init__(runner, config, [serv_dep_cap, self._json_multi, self._json_filter])
 
@@ -305,7 +306,7 @@ class MqttSubscribe(TestStep):
             deserialized_json = json.loads(message.payload)
         except json.decoder.JSONDecodeError:
             raise expectations.ExpectationFailure("Message Format", "JSON Formatted Message". message.payload)
-        self._json_multi.add_message(deserialized_json)
+        self._json_multi.add_content(deserialized_json)
 
     def run(self):
         mqtt_service = self.get_capability("ServiceDependency").get_service()

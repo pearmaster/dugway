@@ -20,6 +20,7 @@ class TestCase(JsonSchemaDefinedObject):
         self._steps_by_id = dict()
         self._steps: list[TestStep] = list()
         self._reporter = reporter
+        self._variables: dict[str, str|int|float|bool] = dict()
         for step_config in config.get('steps', []):
             if step_config['type'] in BUILTIN_STEPS:
                 step = BUILTIN_STEPS[step_config['type']](runner, step_config)
@@ -40,6 +41,9 @@ class TestCase(JsonSchemaDefinedObject):
                 if step_id := step_config.get('id'):
                     self._steps_by_id[step_id] = step_mgr.driver
         self._current_step = None
+
+    def add_variable(self, var_name: str, var_value: str|int|float|bool):
+        self._variables[var_name] = var_value
 
     def get_step(self, step_id: str) -> TestStep:
         return self._steps_by_id[step_id]

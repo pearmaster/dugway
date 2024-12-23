@@ -60,6 +60,7 @@ dependencies = [
     { name = "pluggy" },
     { name = "protobuf-inspector" },
     { name = "pytest" },
+    { name = "python-jsonpath" },
     { name = "rich" },
     { name = "stevedore" },
     { name = "typer" },
@@ -76,6 +77,7 @@ requires-dist = [
     { name = "pluggy", specifier = ">=1.3.0" },
     { name = "protobuf-inspector", specifier = ">=0.2" },
     { name = "pytest", specifier = ">=8.2.0" },
+    { name = "python-jsonpath", specifier = ">=1.2.2" },
     { name = "rich", specifier = ">=13.9.4" },
     { name = "stevedore", specifier = ">=5.1.0" },
     { name = "typer", specifier = ">=0.12.3" },
@@ -338,6 +340,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/05/35/30e0d83068951d90a01852cb1cef56e5d8a09d20c7f511634cc2f7e0372a/pytest-8.3.4.tar.gz", hash = "sha256:965370d062bce11e73868e0335abac31b4d3de0e82f4007408d242b4f8610761", size = 1445919 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/11/92/76a1c94d3afee238333bc0a42b82935dd8f9cf8ce9e336ff87ee14d9e1cf/pytest-8.3.4-py3-none-any.whl", hash = "sha256:50e16d954148559c9a74109af1eaf0c945ba2d8f30f0a3d3335edde19788b6f6", size = 343083 },
+]
+
+[[package]]
+name = "python-jsonpath"
+version = "1.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/57/483d4ebdf53d4da86320c3af24abe5dff85b672c8404180882e58ff3d2fe/python_jsonpath-1.2.2.tar.gz", hash = "sha256:af8bf6e91cdb8be9452fa14c45482278302fe6a48f94f20133a411822d34fdbb", size = 42489 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/a0/6fee60996ffe5175dda9fedad2db508350f97a4aff78596a88ab9d43be2e/python_jsonpath-1.2.2-py3-none-any.whl", hash = "sha256:7eda0dbd5b834147ec8a359d6c926ad360f211de7cfc5790cc8b4074de118caa", size = 53623 },
 ]
 
 [[package]]

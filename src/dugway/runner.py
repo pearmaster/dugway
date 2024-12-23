@@ -13,52 +13,8 @@ from .meta import JsonSchemaType, JsonConfigType
 from .meta_class import JsonSchemaDefinedObject
 from .reporter import AbstractReporter
 from .case import TestCase
+from .service import Service
 
-class Service(JsonSchemaDefinedObject):
-    """ A service is a web server or MQTT broker or connection to something else.  
-    It is static, meaning that it is available to all the tests and test steps without
-    changing.
-
-    A test may have multiple services of same or varying types.
-
-    This is a base class.  More concrete classes, such as an MQTT connection service,
-    should inherit from this base class.
-    """
-
-    def __init__(self, runner, config: JsonConfigType, capabilities=[]):
-        super().__init__(config=config, capabilities=capabilities)
-        self._runner = runner
-        self._logger = logging.getLogger(__class__.__name__)
-
-    @classmethod
-    def get_generic_schema(cls) -> JsonSchemaType:
-        return {
-            "type": "object",
-            "properties": {
-                "type": {
-                    "type": "string",
-                },
-            },
-            "required": [
-                "type",
-            ],
-        }
-
-    def setup(self):
-        """ This is called once at the beginning of testing.  For example, to make a persistent connection
-        to a broker.
-        """
-        pass
-
-    def reset(self):
-        """ This is called between tests to reset any data.  For example, to clear cookies or subscriptions.
-        """
-        pass
-
-    def teardown(self):
-        """ This is called at the end of testing.  For example, to disconnect a persistent connection.
-        """
-        pass
 
 class TestSuite(JsonSchemaDefinedObject):
     """ In Dugway, a TestSuite is the largest component, being defined by a JSON/YAML file.
@@ -72,6 +28,7 @@ class TestSuite(JsonSchemaDefinedObject):
         self._services: dict[str, Service] = dict()
         self._cases: dict[str, TestCase] = dict()
         self._reporter = reporter
+        self._variables = dict()
         for service_name, service_config in config.get('services', dict()).items():
             service_type = service_config.get('type')
             service_mgr = driver.DriverManager(
@@ -93,6 +50,13 @@ class TestSuite(JsonSchemaDefinedObject):
     @property
     def name(self):
         return self._name
+
+    @property
+    def current_case(self) -> TestCase:
+        return self._current_case
+
+    def add_variable(self, var_name: str, var_value: int|str|float|bool|None):
+        self._variables[var_name] = var_value
 
     def get_service(self, service_name: str) -> Service:
         return self._services[service_name]
