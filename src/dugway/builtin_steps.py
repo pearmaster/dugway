@@ -12,7 +12,7 @@ class Sleep(TestStep):
     
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(runner, config)
-        self._time_to_sleep = int(config.get('time', 1))
+        self._time_to_sleep = int(runner.template_eval(config.get('time', 1)))
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -54,6 +54,7 @@ class ConvertToJson(TestStep):
                 json_content = json.loads(content)
                 self.check_json(json_content)
                 self.json_multi_cap.add_content(json_content)
+                content = self.multi_textual.get_or_none()
         else:
             raise expectations.FailedTestStep("The 'from' step did not provide a textual response body")
 
@@ -121,6 +122,7 @@ class JsonPath(TestStep):
             content = self.multi_textual.get_or_none()
             while content is not None:
                 self._search(data)
+                content = self.multi_textual.get_or_none()
         if not found_source:
             raise expectations.FailedTestStep("The 'from' step did not provide JSON content")
         min_matches = self.config.get("minimum", 0)
@@ -161,10 +163,23 @@ class AddService(TestStep):
         super().__init__(runner, config, [self.from_step])
 
     def get_config_schema(self) -> JsonSchemaType:
-        return Service.get_generic_schema()
+        return {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "config": Service.get_generic_schema(),
+            },
+            "required": [
+                "name",
+                "config",
+            ]
+        }
     
     def run(self):
-        ...
+        service_name = self.config.get("name")
+        service_config = self.config.get("config")
+        self._runner.add_service(service_name, service_config)
 
 BUILTIN_STEPS = {
     'sleep': Sleep,

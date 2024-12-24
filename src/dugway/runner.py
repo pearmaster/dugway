@@ -30,22 +30,25 @@ class TestSuite(JsonSchemaDefinedObject):
         self._reporter = reporter
         self._variables = dict()
         for service_name, service_config in config.get('services', dict()).items():
-            service_type = service_config.get('type')
-            service_mgr = driver.DriverManager(
-                namespace='dugwayservice',
-                name=service_type,
-                invoke_on_load=True,
-                invoke_kwds={
-                    "runner": self._runner,
-                    "config": service_config,
-                }
-            )
-            self._services[service_name] = service_mgr.driver
+            self.add_service(service_name, service_config)
         for case_key, case_config in config.get('testCases', dict()).items():
             case_name = case_config.get('name', case_key)
             the_case = TestCase(case_name, self._runner, case_config, self._reporter)
             self._cases[case_name] = the_case
         self._current_case = None
+
+    def add_service(self, service_name, service_config):
+        service_type = service_config.get('type')
+        service_mgr = driver.DriverManager(
+            namespace='dugwayservice',
+            name=service_type,
+            invoke_on_load=True,
+            invoke_kwds={
+                "runner": self._runner,
+                "config": service_config,
+            }
+        )
+        self._services[service_name] = service_mgr.driver
 
     @property
     def name(self):
