@@ -6,7 +6,7 @@ from .step import TestStep
 from .meta import JsonConfigType, JsonSchemaType
 from .reporter import AbstractReporter
 from .builtin_steps import BUILTIN_STEPS
-
+from .expectations import FailedTestStep
 
 class TestCase(JsonSchemaDefinedObject):
     """ A test suite is made up of 1+ test cases.  Each test case contains 1+ test steps.
@@ -54,8 +54,11 @@ class TestCase(JsonSchemaDefinedObject):
             self._reporter.start_step(test_step.get_name(dfault=str(i)))
             try:
                 test_step.run()
-            except Exception as e:
+            except FailedTestStep as e:
                 self._reporter.step_failure("Exception", e)
+                return False
+            except Exception as e:
+                self._reporter.step_failure("Exception", str(e))
                 return False
             else:
                 self._reporter.end_step(True)

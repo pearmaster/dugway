@@ -47,7 +47,7 @@ class ConvertToJson(TestStep):
         if textual := from_step.find_capability("TextContent"):
             resp_json = json.loads(textual.response_body)
             self.check_json(resp_json)
-            self.json_content_cap.json_response_body = resp_json
+            self.json_content_cap.json_content = resp_json
         elif multi_textual := from_step.find_capability("TextMultiContent"):
             content = self.multi_textual.get_or_none()
             while content is not None:
@@ -75,14 +75,16 @@ class JsonPath(TestStep):
                         "path": {
                             "type": "string",
                         }
-                    }
+                    },
+                    "required": ["path"],
                 },
                 {
                     "properties": {
                         "pointer": {
                             "type": "string"
                         }
-                    }
+                    },
+                    "required": ["pointer"],
                 }
             ],
             "properties": {
@@ -97,14 +99,14 @@ class JsonPath(TestStep):
         }
         
     def _search(self, data):
-        if path := self.config.get("path"):
+        if path := self._config.get("path"):
             matches = jsonpath.finditer(path, data)
             for match in matches:
                 if not self.value_cap.is_set:
                     self.value_cap.set(match.value)
                 self.multi_value_cap.add_content(match.value)
                 self._match_count += 1
-        elif pointer_str := self.config.get("pointer"):
+        elif pointer_str := self._config.get("pointer"):
             pointer = jsonpath.JSONPointer(pointer_str)
             value = pointer.resolve(data)
             if not self.value_cap.is_set:
@@ -114,21 +116,22 @@ class JsonPath(TestStep):
 
     def run(self):
         found_source = False
-        if data := self.from_step.find_capability("JsonContent"):
+        if json_content_cap := self.from_step.get_step().find_capability("JsonContent"):
             found_source = True
-            self._search(data)
-        if multi_textual := self.from_step.find_capability("TextMultiContent"):
+            self._search(json_content_cap.json_content)
+            self._runner._reporter.step_info(f"Match", str(self.value_cap.get()))
+        if multi_json_content_cap := self.from_step.get_step().find_capability("JsonMultiContent"):
             found_source = True
-            content = self.multi_textual.get_or_none()
+            content = multi_json_content_cap.get_or_none()
             while content is not None:
-                self._search(data)
-                content = self.multi_textual.get_or_none()
+                self._search(content)
+                content = multi_json_content_cap.get_or_none()
         if not found_source:
-            raise expectations.FailedTestStep("The 'from' step did not provide JSON content")
-        min_matches = self.config.get("minimum", 0)
+            raise expectations.FailedTestStep(f"The 'from' step '{self.from_step.get_step().get_name()}' did not provide JSON content")
+        min_matches = self._config.get("minimum", 0)
         if self._match_count < min_matches:
             raise expectations.FailedTestStep("Only found {self._match_count} matches but {min_matches} were required.")
-        if max_matches := self.config.get("maximum", False) and self._match_count > max_matches:
+        if max_matches := self._config.get("maximum", False) and self._match_count > max_matches:
             raise expectations.FailedTestStep("Found {self._match_count} matches but only {max_matches} are allowed.")
 
 class ValueSave(TestStep):
@@ -150,11 +153,11 @@ class ValueSave(TestStep):
         }
     
     def run(self):
-        source = self.from_step.find_capability("Value")
+        source = self.from_step.get_step().find_capability("Value")
         value = source.get()
-        if var_name := self.config.get("suite", False):
+        if var_name := self._config.get("suite", False):
             self._runner.add_variable(var_name, value)
-        if var_name := self.config.get("case", False):
+        if var_name := self._config.get("case", False):
             self._runner.current_case.add_variable(var_name, value)
 
 class AddService(TestStep):
@@ -177,8 +180,8 @@ class AddService(TestStep):
         }
     
     def run(self):
-        service_name = self.config.get("name")
-        service_config = self.config.get("config")
+        service_name = self._config.get("name")
+        service_config = self._config.get("config")
         self._runner.add_service(service_name, service_config)
 
 BUILTIN_STEPS = {

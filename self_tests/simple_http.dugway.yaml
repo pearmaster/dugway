@@ -10,7 +10,7 @@ testCases:
       - id: request_joke
         type: http_request
         service: joke_api
-        path: /joke/Any
+        path: /joke/Misc?safe-mode
         follow_redirects: true
         expect:
           status_code: 200
@@ -21,12 +21,32 @@ testCases:
           json_schema:
             type: object
             properties:
+              type:
+                type: string
+              joke:
+                type: string
               setup:
                 type: string
               delivery:
                 type: string
               id:
                 type: integer
-            required:
-              - setup
-              - delivery
+            if:
+              properties:
+                type:
+                  const: "twopart"
+            then:
+              required:
+                - setup
+                - delivery
+            else:
+              required:
+                - joke
+      - id: find_joke
+        type: jsonpath
+        from: convert_to_json
+        pointer: /id
+      - id: find_somethign_else
+        type: jsonpath
+        from: convert_to_json
+        pointer: /idx

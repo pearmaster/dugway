@@ -373,6 +373,6 @@ class MqttMessage(TestStep):
                 json_msg = json_multi.get()
                 self.check_json(json_msg)
         elif js_resp_bod := from_step.find_capability("JsonResponseBody"):
-            self.check_json(js_resp_bod.json_response_body)
+            self.check_json(js_resp_bod.json_content)
         else:
             raise expectations.TestStepMissingCapability("No JsonMultiResponse or JsonResponseBody capability found")

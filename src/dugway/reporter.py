@@ -15,6 +15,7 @@ from rich.columns import Columns
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
+from rich.traceback import Traceback
 from rich import print
 from protobuf_inspector.types import StandardParser as ProtobufParser
 
@@ -126,6 +127,8 @@ def create_rich_panel(title:str, data:str|dict[str,str]|list[str|dict[str,str]]|
             table = create_rich_table(data)
         elif isinstance(data, list):
             ...
+        elif isinstance(data, Exception):
+            return Panel(Traceback.from_exception(type(data), data, data.__traceback__))
 
 def try_display_raw_protobuf(data) -> str|None:
     parser = ProtobufParser()
@@ -142,7 +145,7 @@ class RichReporter(AbstractReporter):
         super(RichReporter, self).__init__()
         self.tree = Tree("Dugway")
         self.tree.hide_root = True
-        self.display = Live(self.tree)
+        self.display = Live(self.tree, vertical_overflow="visible")
         self.services = []
         self.current_suite_tree: Tree = None
         self.current_suite_spinner: MyRichStatus = None
@@ -188,7 +191,7 @@ class RichReporter(AbstractReporter):
         self.current_step_tree.add(create_rich_panel(title, data))
 
     def step_failure(self, title, data=None):
-        self.current_step_tree.add(create_rich_panel(str(data.__class__), str(data), error_panel=True))
+        self.current_step_tree.add(create_rich_panel(str(data.__class__), data, error_panel=True))
         self.display.refresh()
         self.end_step(False)
 

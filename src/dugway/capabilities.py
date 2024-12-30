@@ -25,15 +25,15 @@ class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
 class JsonContentCapability(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("JsonResponseBody", runner, config)
+        super().__init__("JsonContent", runner, config)
         self._response_body: dict[str, Any]|None = None
 
     @property
-    def json_response_body(self) -> dict[str, Any]|None:
+    def json_content(self) -> dict[str, Any]|None:
         return self._response_body
     
-    @json_response_body.setter
-    def json_response_body(self, json_resp_body: dict[str, Any]):
+    @json_content.setter
+    def json_content(self, json_resp_body: dict[str, Any]):
         self._response_body = json_resp_body
 
     def set_json_response_from_string(self, json_text: str):
@@ -132,7 +132,7 @@ class ValueCapability(JsonSchemaDefinedCapability):
     
     @property
     def is_set(self) -> bool:
-        return self._was_set
+        return self._is_set
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
