@@ -35,6 +35,10 @@ class TestSuite(JsonSchemaDefinedObject):
             case_name = case_config.get('name', case_key)
             the_case = TestCase(case_name, self._runner, case_config, self._reporter)
             self._cases[case_name] = the_case
+            if setup_config := config.get('caseSetUp'):
+                the_case.add_setup(setup_config)
+            if teardown_config := config.get('caseTearDown'):
+                the_case.add_teardown(teardown_config)
         self._current_case = None
 
     def add_service(self, service_name, service_config):
@@ -110,7 +114,9 @@ class TestSuite(JsonSchemaDefinedObject):
                 "services": {
                     "type": "object",
                     "additionalProperties": Service.get_generic_schema(),
-                }
+                },
+                "caseSetUp": TestCase.get_generic_schema(),
+                "caseTearDown": TestCase.get_generic_schema(),
             },
             "required": [
                 "services",

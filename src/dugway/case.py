@@ -1,4 +1,6 @@
 
+from typing import Any, LiteralString
+
 from stevedore import driver
 
 from .meta_class import JsonSchemaDefinedObject
@@ -18,13 +20,19 @@ class TestCase(JsonSchemaDefinedObject):
         super().__init__(config)
         self._runner = runner
         self._steps_by_id = dict()
+        self._setup: list[TestStep] = list()
+        self._teardown: list[TestStep] = list()
         self._steps: list[TestStep] = list()
         self._reporter = reporter
         self._variables: dict[str, str|int|float|bool] = dict()
+        self._add_steps(config, self._steps)
+        self._current_step = None
+
+    def _add_steps(self, config, dest_list: list[TestStep]):
         for step_config in config.get('steps', []):
             if step_config['type'] in BUILTIN_STEPS:
-                step = BUILTIN_STEPS[step_config['type']](runner, step_config)
-                self._steps.append(step)
+                step = BUILTIN_STEPS[step_config['type']](self._runner, step_config)
+                dest_list.append(step)
                 if step_id := step_config.get('id'):
                     self._steps_by_id[step_id] = step
             else:
@@ -37,10 +45,15 @@ class TestCase(JsonSchemaDefinedObject):
                         "config": step_config,
                     }
                 )
-                self._steps.append(step_mgr.driver)
+                dest_list.append(step_mgr.driver)
                 if step_id := step_config.get('id'):
                     self._steps_by_id[step_id] = step_mgr.driver
-        self._current_step = None
+
+    def add_setup(self, setup_config):
+        self._add_steps(setup_config, self._setup)
+
+    def add_teardown(self, teardown_config):
+        self._add_steps(teardown_config, self._teardown)
 
     def add_variable(self, var_name: str, var_value: str|int|float|bool):
         self._variables[var_name] = var_value
@@ -48,21 +61,37 @@ class TestCase(JsonSchemaDefinedObject):
     def get_step(self, step_id: str) -> TestStep:
         return self._steps_by_id[step_id]
 
-    def run(self) -> bool:
-        for i, test_step in enumerate(self._steps):
-            self._current_step = test_step
-            self._reporter.start_step(test_step.get_name(dfault=str(i)))
-            try:
-                test_step.run()
-            except FailedTestStep as e:
-                self._reporter.step_failure("Exception", e)
-                return False
-            except Exception as e:
-                self._reporter.step_failure("Exception", str(e))
-                return False
-            else:
-                self._reporter.end_step(True)
+    def _run_step(self, i: int, test_step: TestStep):
+        self._current_step = test_step
+        self._reporter.start_step(test_step.get_name(dfault=str(i)))
+        try:
+            test_step.run()
+        except FailedTestStep as e:
+            self._reporter.step_failure("Exception", e)
+            return False
+        except Exception as e:
+            self._reporter.step_failure("Exception", str(e))
+            return False
+        else:
+            self._reporter.end_step(True)
         return True
+
+    def run(self) -> bool:
+        result = True
+        for i, setup_step in enumerate(self._setup):
+            if not self._run_step(i, setup_step):
+                result = False
+                break
+        if result:
+            for i, test_step in enumerate(self._steps):
+                if not self._run_step(i, test_step):
+                    result = False
+                    break
+        for i, teardown_step in enumerate(self._teardown):
+            if not self._run_step(i, teardown_step):
+                result = False
+                break
+        return result
 
     @classmethod
     def get_generic_schema(cls) -> JsonSchemaType:
