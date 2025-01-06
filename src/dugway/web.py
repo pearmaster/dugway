@@ -91,6 +91,10 @@ class HttpRequest(TestStep):
                     "type": "boolean",
                     "default": True
                 },
+                "json": True, # Allow any json
+                "content": {
+                    "type": "string", # or allow a string
+                },
                 "expect": {
                     "type": "object",
                     "properties": {
@@ -98,9 +102,6 @@ class HttpRequest(TestStep):
                             "type": "integer",
                             "minimum": 200,
                             "maximum": 599,
-                        },
-                        "json_schema": {
-                            "type": "object",
                         }
                     },
                 }
@@ -114,11 +115,20 @@ class HttpRequest(TestStep):
         http_service = self.serv_dep.get_service()
         method = self._config.get('method', 'GET')
         self._runner._reporter.step_info(f"{method} Request", http_service.get_url(self._path))
+        headers = self._config.get('headers', dict())
+        httpx_kwargs = dict()
+        if json_body := self._config.get('json'):
+            if 'content-type' not in [h.lower() for h in headers.keys()]:
+                headers['Content-Type'] = 'application/json'
+            httpx_kwargs['json'] = json_body
+        elif raw_body := self._config.get('content'):
+            httpx_kwargs['content'] = raw_body
         resp = http_service.make_request(
             method,
             self._path,
-            headers=self._config.get('headers', dict()),
-            follow_redirects=self._config.get('follow_redirects', True)
+            headers=headers,
+            follow_redirects=self._config.get('follow_redirects', True),
+            **httpx_kwargs
         )
         self._runner._reporter.step_info(f"{resp.status_code} Response", resp.text)
         if expected_status_code := self._expectations.get('status_code'):
