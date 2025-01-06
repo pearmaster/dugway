@@ -66,6 +66,7 @@ class JsonPath(TestStep):
         self.from_step = FromStep(runner, config)
         super().__init__(runner, config, [self.from_step, self.value_cap, self.multi_value_cap])
         self._match_count = 0
+        self._match_path = "Match"
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -100,6 +101,7 @@ class JsonPath(TestStep):
         
     def _search(self, data):
         if path := self._config.get("path"):
+            self._match_path = path
             matches = jsonpath.finditer(path, data)
             for match in matches:
                 if not self.value_cap.is_set:
@@ -107,6 +109,7 @@ class JsonPath(TestStep):
                 self.multi_value_cap.add_content(match.value)
                 self._match_count += 1
         elif pointer_str := self._config.get("pointer"):
+            self._match_path = pointer_str
             pointer = jsonpath.JSONPointer(pointer_str)
             value = pointer.resolve(data)
             if not self.value_cap.is_set:
@@ -119,7 +122,7 @@ class JsonPath(TestStep):
         if json_content_cap := self.from_step.get_step().find_capability("JsonContent"):
             found_source = True
             self._search(json_content_cap.json_content)
-            self._runner._reporter.step_info(f"Match", str(self.value_cap.get()))
+            self._runner._reporter.step_info(f"Match against '{self._match_path}'", str(self.value_cap.get()))
         if multi_json_content_cap := self.from_step.get_step().find_capability("JsonMultiContent"):
             found_source = True
             content = multi_json_content_cap.get_or_none()
