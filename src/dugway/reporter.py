@@ -154,8 +154,9 @@ def try_display_raw_protobuf(data) -> str|None:
 
 class RichReporter(AbstractReporter):
 
-    def __init__(self):
+    def __init__(self, debug=False):
         super(RichReporter, self).__init__()
+        self._debug = debug
         self.tree = Tree("Dugway")
         self.tree.hide_root = True
         self.display = Live(self.tree, vertical_overflow="visible")
@@ -192,7 +193,7 @@ class RichReporter(AbstractReporter):
 
     def end_case(self, result):
         self.current_case_tree.label = self.current_case_spinner.finish(failed=(not result))
-        if result:
+        if result and not self._debug:
             self.current_case_tree.expanded = False
         self.display.refresh()
 
