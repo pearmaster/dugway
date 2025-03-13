@@ -9,6 +9,7 @@ from .expectations import InvalidTestConfig
 
 JsonConfigType = dict[str,Any]
 JsonSchemaType = bool|dict[str,Any]
+JsonContentType = dict[str,Any]|list[Any]|bool|int|float|str|None
 
 class JsonSchemaDefinedClass(ABC):
     """ This is an abstract base class for an object which is defined by a config dictionary,

@@ -24,6 +24,7 @@ class TestSuite(JsonSchemaDefinedObject):
     def __init__(self, name: str, runner, config: dict[str, Any], reporter: AbstractReporter):
         super().__init__(config)
         self._name = os.path.basename(name)
+        self.logger = logging.getLogger(f"{self._name}TestSuite")
         self._runner = runner
         self._services: dict[str, Service] = dict()
         self._cases: dict[str, TestCase] = dict()
@@ -82,17 +83,18 @@ class TestSuite(JsonSchemaDefinedObject):
         for case_name, test_case in self._cases.items():
             yield (case_name, test_case)
 
-    def do_test_case_execution(self, case_name: str, test_case: TestCase):
+    def do_test_case_execution(self, case_name: str, test_case: TestCase) -> bool:
         self._reporter.start_case(case_name)
         self._current_case = test_case
         result = test_case.run()
         for service in self._services.values():
             service.reset()
         self._reporter.end_case(result)
+        return result
 
     def run(self) -> bool:
         self._reporter.start_suite(self._name)
-        print(f"starting suite with {len(self._services)} services")
+        self.logger.debug(f"starting suite with {len(self._services)} services")
         self.do_setup()
         result = True
         for case_name, test_case in self.iterate_test_cases():
@@ -140,7 +142,6 @@ class DugwayRunner:
         self.jinja2_env.globals.update(self.globals)
         self._reporter = reporter
         self._suite = TestSuite(filename, self, self._config, self._reporter)
-
 
     def get_service(self, service_name: str):
         return self._suite.get_service(service_name)

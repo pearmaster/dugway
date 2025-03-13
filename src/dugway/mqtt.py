@@ -255,6 +255,7 @@ class MqttPublish(TestStep):
             self._qos,
             self._retain
         ]
+        self._runner._reporter.step_info(f"MQTT Publish", pub_args)
         mqtt_service = self.get_capability("ServiceDependency").get_service()
         if mqtt_service.is_v5 and (pub_prop_config := self._config.get('publishProperties', False)):
             pub_props = props.Properties(PacketTypes.PUBLISH)
@@ -269,6 +270,7 @@ class MqttPublish(TestStep):
             if (c_t := pub_prop_config.get('contentType', False)) is not False:
                 pub_props.ContentType = str(c_t)
             pub_args.append(pub_props)
+        
         mqtt_service.publish(*pub_args)
 
 
@@ -306,12 +308,17 @@ class MqttSubscribe(TestStep):
             deserialized_json = json.loads(message.payload)
         except json.decoder.JSONDecodeError:
             raise expectations.ExpectationFailure("Message Format", "JSON Formatted Message". message.payload)
-        self._json_multi.add_content(deserialized_json)
+        properties = {
+            "topic": message.topic
+        }
+        self._json_multi.add_content(deserialized_json, properties)
 
     def run(self):
         mqtt_service = self.get_capability("ServiceDependency").get_service()
-        mqtt_service.subscribe(self._runner.template_eval(self._config.get('topic')), int(self._runner.template_eval(self._config.get('qos', 0))), self._receive_message)
-
+        topic = self._runner.template_eval(self._config.get('topic'))
+        qos = int(self._runner.template_eval(self._config.get('qos', 0)))
+        self._runner._reporter.step_info(f"MQTT Subscribe", topic)
+        mqtt_service.subscribe(topic, qos, self._receive_message)
 
 class MqttMessage(TestStep):
 
@@ -349,6 +356,11 @@ class MqttMessage(TestStep):
         if not self._js_expect.check_against_json_schema(json_data):
             raise expectations.FailedTestStep("Message payload did not match the JSON schema")
 
+    def check_topic(self, topic: str):
+        if expected_topic := self._config.get('expect', dict()).get("topic"):
+            if topic != expected_topic:
+                raise expectations.ExpectationFailure("Received Topic", expected_topic, topic)
+
     def run(self):
         if (timeoutSeconds := self._config.get('timeoutSeconds', None)) is not None:
             timeout_time = datetime.now() + timedelta(seconds=timeoutSeconds)
@@ -369,8 +381,9 @@ class MqttMessage(TestStep):
             if consume_count == 'all':
                 consume_count = json_multi.count
             for _ in range(consume_count):
-                json_msg = json_multi.get()
-                self.check_json(json_msg)
+                json_content = json_multi.get_content()
+                self.check_topic(json_content.properties.get("topic"))
+                self.check_json(json_content.content)
         elif js_resp_bod := from_step.find_capability("JsonResponseBodyCapability"):
             self.check_json(js_resp_bod.json_content)
         else:

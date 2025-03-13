@@ -4,8 +4,13 @@ from queue import Queue, Empty as QueueEmpty
 
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from .meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType
+from .meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType, JsonContentType
 
+class ContentWithProperties:
+
+    def __init__(self, content, properties: dict[str, Any]|None=None):
+        self.content = content
+        self.properties = properties or dict()
 
 class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
     
@@ -26,18 +31,18 @@ class JsonContentCapability(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__("JsonContent", runner, config)
-        self._response_body: dict[str, Any]|None = None
+        self._content = ContentWithProperties(None)
 
     @property
-    def json_content(self) -> dict[str, Any]|None:
-        return self._response_body
+    def json_content(self) -> JsonContentType|None:
+        return self._content.content
     
     @json_content.setter
-    def json_content(self, json_resp_body: dict[str, Any]):
-        self._response_body = json_resp_body
+    def json_content(self, json_resp_body: JsonContentType):
+        self._content.content = json_resp_body
 
     def set_json_response_from_string(self, json_text: str):
-        self._response_body = json.loads(json_text)
+        self.json_content = json.loads(json_text)
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
@@ -46,15 +51,23 @@ class TextContentCapability(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__("TextContent", runner, config)
-        self._response_body: str|None = None
+        self._content = ContentWithProperties(None)
 
     @property
     def response_body(self) -> str|None:
-        return self._response_body
+        return self._content.content
     
     @response_body.setter
-    def response_body(self, resp_body: str):
-        self._response_body = resp_body
+    def response_body(self, resp_body: str, properties: dict[str, Any]|None=None):
+        self._content.content = resp_body
+        if properties:
+            self._content.properties = properties
+
+    @property
+    def response_content(self) -> ContentWithProperties|None:
+        if self._content.content is None:
+            return None
+        return self._content
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
@@ -71,16 +84,26 @@ class TextMultiContentCapability(JsonSchemaDefinedCapability):
         return self._messages.qsize()
 
     def get(self) -> str:
+        return self.get_content().content
+
+    def get_content(self) -> ContentWithProperties:
         return self._messages.get()
 
     def get_or_none(self) -> str|None:
+        content = self.get_content_or_none()
+        if content:
+            content = content.content
+        return content
+
+    def get_content_or_none(self) -> ContentWithProperties|None:
         try:
             self._messages.get_nowait()
         except QueueEmpty:
             return None
 
-    def add_content(self, content: str):
-        self._messages.put(content)
+    def add_content(self, content: str, properties: dict[str, Any]|None=None):
+        content_with_props = ContentWithProperties(content, properties)
+        self._messages.put(content_with_props)
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
@@ -98,17 +121,27 @@ class JsonMultiContentCapability(JsonSchemaDefinedCapability):
     def count(self):
         return self._messages.qsize()
 
-    def get(self) -> dict[str, Any]:
+    def get(self) -> JsonContentType:
+        return self.get_content().content
+
+    def get_content(self) -> ContentWithProperties:
         return self._messages.get()
 
-    def get_or_none(self) -> dict[str, Any]|None:
+    def get_or_none(self) -> JsonContentType|None:
+        content = self.get_content_or_none()
+        if content:
+            content = content.content
+        return content
+
+    def get_content_or_none(self) -> ContentWithProperties|None:
         try:
             self._messages.get_nowait()
         except QueueEmpty:
             return None
 
-    def add_content(self, json_resp: dict[str, Any]):
-        self._messages.put(json_resp)
+    def add_content(self, json_resp: JsonContentType, properties: dict[str, Any]|None=None):
+        content_with_props = ContentWithProperties(json_resp, properties)
+        self._messages.put(content_with_props)
 
     def get_config_schema(self) -> JsonSchemaType:
         return True

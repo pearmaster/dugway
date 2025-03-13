@@ -126,7 +126,7 @@ def create_rich_panel(title:str, data:str|dict[str,str]|list[str|dict[str,str]]|
         elif isinstance(data, dict):
             table = create_rich_table(data)
         elif isinstance(data, list):
-            ...
+            return Panel(create_rich_text("\n".join([str(d) for d in data]), line_numbers=False), title=title, width=80, **kwargs)
         elif hasattr(data, "details"):
             return Panel(create_rich_text(data.details(), line_numbers=False), title=title, width=80, **kwargs)
         elif isinstance(data, Exception):
