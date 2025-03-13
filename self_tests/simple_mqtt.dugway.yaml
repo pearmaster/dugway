@@ -30,7 +30,7 @@ testCases:
         timeoutSeconds: 5
         expect:
           count: 1
-          topic: hello/pong
+          topic: hello/pong2
           json_schema:
             type: string
             const: hi

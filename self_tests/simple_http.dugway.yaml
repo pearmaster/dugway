@@ -46,7 +46,3 @@ testCases:
         type: jsonpath
         from: convert_to_json
         pointer: /id
-      - id: find_somethign_else
-        type: jsonpath
-        from: convert_to_json
-        pointer: /idx

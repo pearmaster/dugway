@@ -18,6 +18,7 @@ class TestCase(JsonSchemaDefinedObject):
 
     def __init__(self, name: str, runner, config: JsonConfigType, reporter: AbstractReporter):
         super().__init__(config)
+        self._name = name
         self._runner = runner
         self._steps_by_id = dict()
         self._setup: list[TestStep] = list()
@@ -61,7 +62,7 @@ class TestCase(JsonSchemaDefinedObject):
     def get_step(self, step_id: str) -> TestStep:
         return self._steps_by_id[step_id]
 
-    def _run_step(self, i: int, test_step: TestStep):
+    def _run_step(self, i: int, test_step: TestStep) -> bool:
         self._current_step = test_step
         self._reporter.start_step(test_step.get_name(dfault=str(i)))
         try:
@@ -86,11 +87,14 @@ class TestCase(JsonSchemaDefinedObject):
             for i, test_step in enumerate(self._steps):
                 if not self._run_step(i, test_step):
                     result = False
+                    print(f"running {test_step} result is {result}")
                     break
         for i, teardown_step in enumerate(self._teardown):
             if not self._run_step(i, teardown_step):
                 result = False
                 break
+        if not result:
+            self._reporter.end_case(False)
         return result
 
     @classmethod

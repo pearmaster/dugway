@@ -17,7 +17,7 @@ from .meta import JsonConfigType, JsonSchemaType
 from .capabilities import (
     JsonSchemaDefinedCapability,
     ServiceDependency,
-    JsonMultiContent,
+    JsonMultiContentCapability,
     FromStep,
     JsonSchemaExpectation,
     JsonSchemaFilter,
@@ -277,7 +277,7 @@ class MqttSubscribe(TestStep):
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
         self._json_filter = JsonSchemaFilter(runner, config)
-        self._json_multi = JsonMultiContent(runner, config)
+        self._json_multi = JsonMultiContentCapability(runner, config)
         self._mqtt_prop_comp = MqttPropertiesComparingCapability(runner, config, "filter")
         super().__init__(runner, config, [serv_dep_cap, self._json_multi, self._json_filter])
 
@@ -353,7 +353,7 @@ class MqttMessage(TestStep):
         if (timeoutSeconds := self._config.get('timeoutSeconds', None)) is not None:
             timeout_time = datetime.now() + timedelta(seconds=timeoutSeconds)
         from_step = self.get_capability("FromStep").get_step()
-        if json_multi := from_step.find_capability("JsonMultiResponse"):
+        if json_multi := from_step.find_capability("JsonMultiContentCapability"):
             if expect := self._config.get('expect', dict()):
                 if (expect_count := expect.get('count', None)) is not None:
                     while timeout_time is None or timeout_time > datetime.now():
@@ -363,8 +363,7 @@ class MqttMessage(TestStep):
                             logger.debug("Waiting for message")
                             sleep(1)
                     else:
-                        failure = expectations.ExpectationFailure(f"Message count", expect_count, json_multi.count)
-                        print(from_step)
+                        failure = expectations.ExpectationFailure("Message count", expect_count, json_multi.count)
                         raise failure
             consume_count = self._config.get('consume', 'all')
             if consume_count == 'all':
@@ -372,7 +371,7 @@ class MqttMessage(TestStep):
             for _ in range(consume_count):
                 json_msg = json_multi.get()
                 self.check_json(json_msg)
-        elif js_resp_bod := from_step.find_capability("JsonResponseBody"):
+        elif js_resp_bod := from_step.find_capability("JsonResponseBodyCapability"):
             self.check_json(js_resp_bod.json_content)
         else:
-            raise expectations.TestStepMissingCapability("No JsonMultiResponse or JsonResponseBody capability found")
+            raise expectations.TestStepMissingCapability("No JsonMultiContentCapability or JsonResponseBodyCapability capability found.")

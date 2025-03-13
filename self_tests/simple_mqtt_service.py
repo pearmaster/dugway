@@ -5,6 +5,7 @@ from paho.mqtt.enums import (
 )
 from paho.mqtt.reasoncodes import ReasonCode
 from paho.mqtt.packettypes import PacketTypes
+import logging
 
 # MQTT broker details
 broker_address = "localhost"
@@ -17,16 +18,20 @@ publish_topic = "hello/pong"
 # MQTT v5 client
 client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, protocol=MQTTProtocolVersion.MQTTv5)
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("SimpleMQTTService")
+
+
 def on_connect(client, userdata, flags, reason_code, properties):
     if not reason_code.is_failure:
-        print("Connected to MQTT broker")
+        logger.info("Connected to MQTT broker")
         client.subscribe(subscribe_topic)
     else:
-        print("Connection failed with result code " + str(reason_code))
+        logger.info("Connection failed with result code %d", reason_code)
 
 def on_message(client, userdata, msg: mqtt.MQTTMessage):
     # Process the received message
-    print(f"Received message: {msg.payload.decode()} {msg.properties}")
+    logger.info(f"Received message: {msg.payload.decode()} {msg.properties}")
 
     response_topic = publish_topic
     if hasattr(msg.properties, 'ResponseTopic'):
@@ -41,6 +46,7 @@ def on_message(client, userdata, msg: mqtt.MQTTMessage):
         resp_props.ContentType = contType
 
     # Publish the new message
+    logger.info("Replying same message to %s", response_topic)
     client.publish(response_topic, msg.payload, qos=1, properties=resp_props)
 
 client.on_connect = on_connect

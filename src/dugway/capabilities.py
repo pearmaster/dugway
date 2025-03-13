@@ -91,7 +91,7 @@ class TextMultiContentCapability(JsonSchemaDefinedCapability):
 class JsonMultiContentCapability(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("JsonMultiContent", runner, config)
+        super().__init__("JsonMultiContentCapability", runner, config)
         self._messages = Queue()
 
     @property
@@ -114,7 +114,7 @@ class JsonMultiContentCapability(JsonSchemaDefinedCapability):
         return True
     
     def __repr__(self) -> str:
-        return f"<JsonMultiContent {self._name} {self._messages.qsize()} message count>"
+        return f"<JsonMultiContentCapability {self._name} {self._messages.qsize()} message count>"
 
 class ValueCapability(JsonSchemaDefinedCapability):
 
