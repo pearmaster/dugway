@@ -107,9 +107,9 @@ def create_rich_table(data:dict[str,str]) -> Table:
         table.add_row(k, v)
     return table
 
-def create_rich_text(data:str):
+def create_rich_text(data:str, line_numbers=True):
     if '\n' in data:
-        return Syntax(data, "text", line_numbers=True)
+        return Syntax(data, "text", line_numbers=line_numbers)
     elif inspectedpb := try_display_raw_protobuf(data):
         return Text(inspectedpb)
     return data
@@ -127,6 +127,8 @@ def create_rich_panel(title:str, data:str|dict[str,str]|list[str|dict[str,str]]|
             table = create_rich_table(data)
         elif isinstance(data, list):
             ...
+        elif hasattr(data, "details"):
+            return Panel(create_rich_text(data.details(), line_numbers=False), title=title, width=80, **kwargs)
         elif isinstance(data, Exception):
             return Panel(Traceback.from_exception(type(data), data, data.__traceback__))
 
@@ -191,7 +193,7 @@ class RichReporter(AbstractReporter):
         self.current_step_tree.add(create_rich_panel(title, data))
 
     def step_failure(self, title, data=None):
-        self.current_step_tree.add(create_rich_panel(str(data.__class__), data, error_panel=True))
+        self.current_step_tree.add(create_rich_panel(title, data, error_panel=True))
         self.display.refresh()
         self.end_step(False)
 

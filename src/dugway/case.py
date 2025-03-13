@@ -68,7 +68,7 @@ class TestCase(JsonSchemaDefinedObject):
         try:
             test_step.run()
         except FailedTestStep as e:
-            self._reporter.step_failure("Exception", e)
+            self._reporter.step_failure(str(e), e)
             return False
         except Exception as e:
             self._reporter.step_failure("Exception", str(e))

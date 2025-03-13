@@ -10,6 +10,9 @@ class ExpectationFailure(FailedTestStep):
         self.expected = expected
         self.actual = actual
 
+    def details(self) -> str:
+        return f"Expected {self.expected} \nActual {self.actual}"
+
 class InvalidTestConfig(Exception):
     pass
 
