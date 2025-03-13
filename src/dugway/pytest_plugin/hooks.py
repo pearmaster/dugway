@@ -8,7 +8,7 @@ import pathlib
 import pytest
 
 from .file import DugwayFile
-import dugway.exceptions
+import dugway.expectations
 
 
 def pytest_collect_file(parent, path: os.PathLike) -> Optional[DugwayFile]:
@@ -21,7 +21,7 @@ def pytest_collect_file(parent, path: os.PathLike) -> Optional[DugwayFile]:
     try:
         compiled = re.compile(pattern)
     except Exception as e:
-        raise dugway.exceptions.InvalidConfigurationException(e) from e
+        raise dugway.expectations.InvalidTestConfig(e) from e
 
     match_dugway_file = compiled.search
 

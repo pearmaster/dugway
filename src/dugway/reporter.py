@@ -53,6 +53,17 @@ class AbstractReporter(ABC):
     def step_failure(self, title, data):
         ...
 
+class NoOpReporter(AbstractReporter):
+
+    def start_suite(self, suite_name: str):
+        pass
+
+    def start_case(self, case_name: str):
+        pass
+
+    def start_step(self, step_name: str):
+        pass
+
 class MultiReporter:
 
     def __init__(self, reporters: list[AbstractReporter]):

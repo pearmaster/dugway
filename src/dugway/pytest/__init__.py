@@ -1,11 +1,7 @@
-"""
-Using example from https://docs.pytest.org/en/latest/example/nonpython.html#yaml-plugin
-"""
-
+import os
 import pytest
 from dugway.runner import DugwayRunner
 from dugway.reporter import NoOpReporter
-from typing import Iterator
 
 class DugwayTestItem(pytest.Item):
 
@@ -18,11 +14,15 @@ class DugwayTestItem(pytest.Item):
         self.parent.suite.do_test_case_execution(self.name, self.spec)
         self.parent.suite.do_teardown()
 
+class DugwayYamlFile(pytest.File):
 
-class DugwayFile(pytest.File):
-
-    def collect(self) -> Iterator[DugwayTestItem]:
+    def collect(self):
         self.runner = DugwayRunner(str(self.path), NoOpReporter())
         self.suite = self.runner.get_suite()
         for case_name, test_case in self.suite.iterate_test_cases():
             yield DugwayTestItem.from_parent(self, name=case_name, spec=test_case)
+
+def pytest_collect_file(parent, path):
+    if os.path.basename(path).endswith(".dugway.yaml") or os.path.basename(path).endswith(".dugway.yml"):
+        return DugwayYamlFile.from_parent(parent, fspath=path)
+
