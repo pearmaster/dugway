@@ -14,7 +14,7 @@ When Dugway is feature complete, it will have these features:
 
 ## Installation
 
-This python project is managed by PDM.
+This Python project is managed by [uv](https://github.com/astral-sh/uv) from Astral.
 
 ## Usage
 
