@@ -11,7 +11,7 @@ from dugway.capabilities import (
 )
 from dugway.expectations import ExpectationFailure, FailedTestStep
 from dugway.mqtt import MqttMessage, MqttService, MqttSubscribe
-from helpers import SourceStep
+from helpers import FakeMqttClient, SourceStep
 
 
 @pytest.mark.parametrize("cap_class", [TextMultiContentCapability, JsonMultiContentCapability])
@@ -116,9 +116,9 @@ def test_mqtt_connect_properties_are_applied(runner):
             "connectProperties": {"sessionExpiryInterval": 30, "receiveMaximum": 10},
         },
     )
-    calls = []
-    service.client = SimpleNamespace(connect=lambda *a, **kw: calls.append(kw), loop_start=lambda: None)
+    service.client = FakeMqttClient(service)
     service.setup()
+    calls = service.client.connects
     props = calls[0]["properties"]
     assert props.SessionExpiryInterval == 30
     assert props.ReceiveMaximum == 10

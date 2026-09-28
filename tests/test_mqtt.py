@@ -5,8 +5,10 @@ import paho.mqtt.properties as props
 import pytest
 from paho.mqtt.packettypes import PacketTypes
 
-from dugway.expectations import ExpectationFailure, InvalidTestConfig
+from dugway import mqtt
+from dugway.expectations import ExpectationFailure, FailedTestStep, InvalidTestConfig
 from dugway.mqtt import MqttMessage, MqttPublish, MqttService, MqttSubscribe
+from helpers import FakeMqttClient
 
 
 def mqtt_message(topic="t", payload=b'"hi"', properties=None):
@@ -24,9 +26,9 @@ def test_v5_clean_session_is_sent_as_clean_start(runner):
         runner,
         {"type": "mqtt", "hostname": "localhost", "protocol": 5, "cleanSession": False},
     )
-    calls = []
-    service.client = SimpleNamespace(connect=lambda *a, **kw: calls.append(kw), loop_start=lambda: None)
+    service.client = FakeMqttClient(service)
     service.setup()
+    calls = service.client.connects
     assert calls[0]["clean_start"] is False
 
 
@@ -124,3 +126,40 @@ def test_consume_leaves_remaining_messages(runner, monkeypatch):
     sub._receive_message(None, None, mqtt_message())
     MqttMessage(runner, {"type": "mqtt_message", "from": "sub", "consume": 1}).run()
     assert sub._json_multi.count == 1
+
+
+def mqtt_service(runner, monkeypatch, **fake_client_kwargs):
+    monkeypatch.setattr(mqtt, "BROKER_ACK_TIMEOUT_SECONDS", 0.1)
+    service = MqttService(runner, {"type": "mqtt", "hostname": "localhost"})
+    service.client = FakeMqttClient(service, **fake_client_kwargs)
+    return service
+
+
+def test_setup_fails_when_broker_refuses_connection(runner, monkeypatch):
+    service = mqtt_service(runner, monkeypatch, connack="Not authorized")
+    with pytest.raises(ConnectionError, match="refused"):
+        service.setup()
+
+
+def test_setup_fails_when_broker_never_acknowledges(runner, monkeypatch):
+    service = mqtt_service(runner, monkeypatch, connack=None)
+    with pytest.raises(ConnectionError, match="did not acknowledge"):
+        service.setup()
+
+
+def test_subscribe_waits_for_acknowledgement(runner, monkeypatch):
+    service = mqtt_service(runner, monkeypatch)
+    service.subscribe("t", 0, lambda *a: None)
+    assert service.client.subscribes == ["t"]
+
+
+def test_subscribe_fails_when_broker_refuses(runner, monkeypatch):
+    service = mqtt_service(runner, monkeypatch, suback="Not authorized")
+    with pytest.raises(FailedTestStep, match="refused"):
+        service.subscribe("t", 0, lambda *a: None)
+
+
+def test_subscribe_fails_when_broker_never_acknowledges(runner, monkeypatch):
+    service = mqtt_service(runner, monkeypatch, suback=None)
+    with pytest.raises(FailedTestStep, match="did not acknowledge"):
+        service.subscribe("t", 0, lambda *a: None)

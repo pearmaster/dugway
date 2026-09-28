@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from time import sleep
@@ -26,6 +27,9 @@ from .service import Service
 from .step import TestStep
 
 logger = logging.getLogger(__name__)
+
+# How long to wait for the broker to acknowledge a connection or subscription.
+BROKER_ACK_TIMEOUT_SECONDS = 10
 
 
 class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
@@ -121,6 +125,23 @@ class MqttService(Service):
                 self._runner.template_eval(credentials["password"]),
             )
         self._subscriptions: list[str] = []
+        # Acks arrive on paho's network thread; these let setup() and subscribe()
+        # wait for them, so a later step can't race ahead of the broker.
+        self._connack = threading.Event()
+        self._connect_reason = None
+        self._suback_lock = threading.Condition()
+        self._subacks: dict[int, list] = {}
+        self.client.on_connect = self._on_connect
+        self.client.on_subscribe = self._on_subscribe
+
+    def _on_connect(self, client, userdata, flags, reason_code, properties):
+        self._connect_reason = reason_code
+        self._connack.set()
+
+    def _on_subscribe(self, client, userdata, mid, reason_code_list, properties):
+        with self._suback_lock:
+            self._subacks[mid] = reason_code_list
+            self._suback_lock.notify_all()
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -187,6 +208,13 @@ class MqttService(Service):
         self._logger.debug(f"MQTT connecting with {args} {kwargs}")
         self.client.connect(*args, **kwargs)
         self.client.loop_start()
+        if not self._connack.wait(BROKER_ACK_TIMEOUT_SECONDS):
+            raise ConnectionError(
+                f"MQTT broker {args[0]}:{args[1]} did not acknowledge the connection "
+                f"within {BROKER_ACK_TIMEOUT_SECONDS} seconds"
+            )
+        if self._connect_reason.is_failure:
+            raise ConnectionError(f"MQTT broker {args[0]}:{args[1]} refused the connection: " f"{self._connect_reason}")
 
     def reset(self):
         for sub_topic in self._subscriptions:
@@ -223,7 +251,18 @@ class MqttService(Service):
     ):
         self.client.message_callback_add(sub_topic, callback)
         self._subscriptions.append(sub_topic)
-        self.client.subscribe(sub_topic, qos)
+        result, mid = self.client.subscribe(sub_topic, qos)
+        if result != mqtt_client.MQTT_ERR_SUCCESS:
+            raise expectations.FailedTestStep(f"Could not subscribe to {sub_topic}: {mqtt_client.error_string(result)}")
+        with self._suback_lock:
+            if not self._suback_lock.wait_for(lambda: mid in self._subacks, BROKER_ACK_TIMEOUT_SECONDS):
+                raise expectations.FailedTestStep(
+                    f"MQTT broker did not acknowledge the subscription to {sub_topic} "
+                    f"within {BROKER_ACK_TIMEOUT_SECONDS} seconds"
+                )
+            reason_codes = self._subacks.pop(mid)
+        if failures := [rc for rc in reason_codes if rc.is_failure]:
+            raise expectations.FailedTestStep(f"MQTT broker refused the subscription to {sub_topic}: {failures[0]}")
 
 
 class MqttPublish(TestStep):
