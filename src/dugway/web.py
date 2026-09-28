@@ -58,7 +58,7 @@ class HttpService(Service):
         all_headers.update(
             {
                 k: self._runner.template_eval(v)
-                for (k, v) in httpx_kwargs.get("headers", dict())
+                for (k, v) in httpx_kwargs.get("headers", dict()).items()
             }
         )
         url = self.get_url(path)
@@ -124,14 +124,16 @@ class HttpRequest(TestStep):
         self._runner._reporter.step_info(
             f"{method} Request", http_service.get_url(self._path)
         )
-        headers = self._config.get("headers", dict())
+        # Copied so that adding a Content-Type doesn't modify the step's config
+        headers = dict(self._config.get("headers", dict()))
         httpx_kwargs = dict()
-        if json_body := self._config.get("json"):
+        # Checked by key because falsy bodies like {}, [], 0 and false are still bodies
+        if "json" in self._config:
             if "content-type" not in [h.lower() for h in headers.keys()]:
                 headers["Content-Type"] = "application/json"
-            httpx_kwargs["json"] = json_body
-        elif raw_body := self._config.get("content"):
-            httpx_kwargs["content"] = raw_body
+            httpx_kwargs["json"] = self._config["json"]
+        elif "content" in self._config:
+            httpx_kwargs["content"] = self._config["content"]
         resp = http_service.make_request(
             method,
             self._path,

@@ -5,6 +5,7 @@ from time import sleep
 import logging
 
 import paho.mqtt.client as mqtt_client
+from paho.mqtt.enums import CallbackAPIVersion, MQTTProtocolVersion
 import paho.mqtt.properties as props
 from paho.mqtt.packettypes import PacketTypes
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
@@ -56,12 +57,20 @@ class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
         schema = {
             "type": "object",
             "properties": {
-                self._parent_json_property: self.publish_property_schema(),
+                self._parent_json_property: {
+                    "type": "object",
+                    "properties": {
+                        "publishProperties": self.publish_property_schema(),
+                    },
+                },
             },
         }
         return schema
 
     def properties_match(self, pub_props) -> bool:
+        def received(prop_name):
+            return getattr(pub_props, prop_name, None)
+
         parent_obj = self._config.get(self._parent_json_property, dict())
         if (
             expected_pub_props := parent_obj.get("publishProperties", False)
@@ -69,21 +78,21 @@ class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
             if (
                 p_f_i := expected_pub_props.get("payloadFormatIndicator", False)
             ) is not False:
-                if p_f_i != pub_props.PayloadFormatIndicator:
+                if p_f_i != received("PayloadFormatIndicator"):
                     return False
             if (
                 m_e_i := expected_pub_props.get("messageExpiryInterval", False)
             ) is not False:
-                if m_e_i != pub_props.MessageExpiryInterval:
+                if m_e_i != received("MessageExpiryInterval"):
                     return False
             if (r_t := expected_pub_props.get("responseTopic", False)) is not False:
-                if r_t != pub_props.ResponseTopic:
+                if r_t != received("ResponseTopic"):
                     return False
             if (c_d := expected_pub_props.get("correlationData", False)) is not False:
-                if c_d.encode() != pub_props.CorrelationData:
+                if c_d.encode() != received("CorrelationData"):
                     return False
             if (c_t := expected_pub_props.get("contentType", False)) is not False:
-                if c_t != pub_props.ContentType:
+                if c_t != received("ContentType"):
                     return False
         return True
 
@@ -92,19 +101,20 @@ class MqttService(Service):
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         super().__init__(runner, config)
-        kwargs = dict()
+        kwargs = {"callback_api_version": CallbackAPIVersion.VERSION2}
         if client_id := config.get("clientId", False):
             kwargs["client_id"] = self._runner.template_eval(client_id)
         if protoc := config.get("protocol", False):
             kwargs["protocol"] = {
-                3.1: mqtt_client.MQTTv31,
-                3.11: mqtt_client.MQTTv311,
-                5: mqtt_client.MQTTv5,
+                3.1: MQTTProtocolVersion.MQTTv31,
+                3.11: MQTTProtocolVersion.MQTTv311,
+                5: MQTTProtocolVersion.MQTTv5,
             }[protoc]
         self.is_v5 = protoc == 5
-        clean_session = config.get("cleanSession", None)
-        if clean_session is not None:
-            kwargs["clean_session"] = clean_session
+        # MQTTv5 replaces clean session with clean start, which is given when connecting
+        self._clean_start = config.get("cleanSession", None)
+        if self._clean_start is not None and not self.is_v5:
+            kwargs["clean_session"] = self._clean_start
         self.client = mqtt_client.Client(**kwargs)
         if tls := config.get("tls", False):
             self.client.tls_set()
@@ -123,7 +133,7 @@ class MqttService(Service):
                 },
                 "port": {"type": "integer"},
                 "tls": {"type": "boolean", "default": False},
-                "protocolVersion": {
+                "protocol": {
                     "type": "number",
                     "enum": [3.1, 3.11, 5],
                     "default": 3.11,
@@ -151,7 +161,7 @@ class MqttService(Service):
                         "username": {"type": "string"},
                         "password": {"type": "string"},
                     },
-                    "required": ["username", "password,"],
+                    "required": ["username", "password"],
                 },
             },
             "required": [
@@ -167,6 +177,8 @@ class MqttService(Service):
         ]
         kwargs = dict()
         if self.is_v5:
+            if self._clean_start is not None:
+                kwargs["clean_start"] = self._clean_start
             prop_config = self._config.get("connectProperties", dict())
             connect_props = props.Properties(PacketTypes.CONNECT)
             if (s_e_i := prop_config.get("sessionExpiryInterval", False)) is not False:
@@ -229,9 +241,9 @@ class MqttPublish(TestStep):
         self._topic = config.get("topic")
         self._qos = config.get("qos", 0)
         self._retain = config.get("retain", False)
-        if (json_payload := config.get("json", None)) is not None:
-            self._payload = json.dumps(json_payload)
-        if config.get("nullPayload", False):
+        if "json" in config:
+            self._payload = json.dumps(config["json"])
+        else:
             self._payload = None
 
     def get_config_schema(self) -> JsonSchemaType:
@@ -258,7 +270,7 @@ class MqttPublish(TestStep):
                             "const": True,
                         }
                     },
-                    "required": ["null_payload"],
+                    "required": ["nullPayload"],
                 },
             ],
             "required": [
@@ -303,7 +315,9 @@ class MqttSubscribe(TestStep):
             runner, config, "filter"
         )
         super().__init__(
-            runner, config, [serv_dep_cap, self._json_multi, self._json_filter]
+            runner,
+            config,
+            [serv_dep_cap, self._json_multi, self._json_filter, self._mqtt_prop_comp],
         )
 
     def get_config_schema(self) -> JsonSchemaType:
@@ -317,10 +331,17 @@ class MqttSubscribe(TestStep):
         }
 
     def _receive_message(self, client: mqtt_client.Client, userdata: Any, message):
+        # This runs in paho's network thread, where a raised exception would be lost,
+        # so errors are queued for the step that consumes the messages.
+        try:
+            self._handle_message(message)
+        except Exception as e:
+            self._logger.debug("Error handling message via %s: %s", message.topic, e)
+            self._json_multi.add_error(e)
+
+    def _handle_message(self, message):
         self._logger.debug("Received message via %s", message.topic)
-        if not self._json_filter.check_against_json_schema(
-            message.payload.decode("utf-8")
-        ):
+        if not self._json_filter.check_against_json_schema(message.payload):
             self._logger.debug(
                 "Filtered out a message that didn't validate against json schema"
             )
@@ -332,9 +353,11 @@ class MqttSubscribe(TestStep):
             return
         try:
             deserialized_json = json.loads(message.payload)
-        except json.decoder.JSONDecodeError:
+        except (json.decoder.JSONDecodeError, UnicodeDecodeError):
             raise expectations.ExpectationFailure(
-                "Message Format", "JSON Formatted Message".message.payload
+                f"Message on '{message.topic}' was not JSON",
+                "JSON Formatted Message",
+                message.payload,
             )
         properties = {"topic": message.topic}
         self._json_multi.add_content(deserialized_json, properties)
@@ -380,10 +403,7 @@ class MqttMessage(TestStep):
         }
 
     def check_json(self, json_data: dict[str, Any]):
-        if not self._js_expect.check_against_json_schema(json_data):
-            raise expectations.FailedTestStep(
-                "Message payload did not match the JSON schema"
-            )
+        self._js_expect.validate(json_data)
 
     def check_topic(self, topic: str):
         if expected_topic := self._config.get("expect", dict()).get("topic"):
@@ -393,6 +413,8 @@ class MqttMessage(TestStep):
                 )
 
     def run(self):
+        # With no timeout, wait for the expected message count indefinitely.
+        timeout_time = None
         if (timeoutSeconds := self._config.get("timeoutSeconds", None)) is not None:
             timeout_time = datetime.now() + timedelta(seconds=timeoutSeconds)
         from_step = self.get_capability(FromStep.NAME).get_step()
@@ -404,6 +426,7 @@ class MqttMessage(TestStep):
             if expect := self._config.get("expect", dict()):
                 if (expect_count := expect.get("count", None)) is not None:
                     while timeout_time is None or timeout_time > datetime.now():
+                        json_multi.raise_first_error()
                         if expect_count == json_multi.count:
                             break
                         else:
@@ -414,6 +437,7 @@ class MqttMessage(TestStep):
                             "Message count", expect_count, json_multi.count
                         )
                         raise failure
+            json_multi.raise_first_error()
             consume_count = self._config.get("consume", "all")
             if consume_count == "all":
                 consume_count = json_multi.count

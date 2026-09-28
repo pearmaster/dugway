@@ -1,4 +1,4 @@
-from typing import Any, LiteralString
+from typing import Any
 
 from stevedore import driver
 

@@ -2,7 +2,10 @@ from typing import Any
 import json
 from queue import Queue, Empty as QueueEmpty
 
-from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
+from jacobsjsonschema.draft7 import (
+    Validator as JsonSchemaValidator,
+    JsonSchemaValidationError,
+)
 
 from .meta import (
     JsonSchemaDefinedClass,
@@ -10,6 +13,7 @@ from .meta import (
     JsonConfigType,
     JsonContentType,
 )
+from .expectations import ExpectationFailure
 
 
 class ContentWithProperties:
@@ -133,10 +137,21 @@ class JsonMultiContentCapability(JsonSchemaDefinedCapability):
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(self.NAME, runner, config)
         self._messages = Queue()
+        self.errors: list[Exception] = list()
 
     @property
     def count(self):
         return self._messages.qsize()
+
+    def add_error(self, error: Exception):
+        """Records a problem with a message that couldn't be added, so that the step
+        consuming the messages can report it.
+        """
+        self.errors.append(error)
+
+    def raise_first_error(self):
+        if self.errors:
+            raise self.errors[0]
 
     def get(self) -> JsonContentType:
         return self.get_content().content
@@ -224,7 +239,7 @@ class MultiValueCapability(JsonSchemaDefinedCapability):
         return True
 
     def __repr__(self) -> str:
-        return f"<MultiValue {self._name} {self._messages.qsize()} message count>"
+        return f"<MultiValue {self._name} {self._value.qsize()} value count>"
 
 
 class ServiceDependency(JsonSchemaDefinedCapability):
@@ -270,7 +285,8 @@ class JsonSchemaExpectation(JsonSchemaDefinedCapability):
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(self.NAME, runner, config)
-        self.json_schema = self._config["expect"]["json_schema"]
+        # 'expect' is shared with other capabilities, so it may be present without a schema
+        self.json_schema = self._config.get("expect", dict()).get("json_schema")
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -285,16 +301,21 @@ class JsonSchemaExpectation(JsonSchemaDefinedCapability):
             },
         }
 
-    def check_against_json_schema(self, data: dict[str, Any]):
-        if "expect" not in self._config and "json_schema" not in self._config["expect"]:
-            return True
+    def validate(self, data: JsonContentType):
+        """Raises ExpectationFailure if the data doesn't match the expected JSON Schema.
+        Does nothing when no schema was given.
+        """
+        if self.json_schema is None:
+            return
         validator = JsonSchemaValidator(self.json_schema)
         try:
             validator.validate(data)
-        except Exception as e:
-            raise e
-            return False
-        return True
+        except JsonSchemaValidationError as e:
+            raise ExpectationFailure(
+                f"JSON did not match the JSON Schema: {e}",
+                json.dumps(self.json_schema),
+                json.dumps(data),
+            ) from e
 
 
 class JsonSchemaFilter(JsonSchemaDefinedCapability):
@@ -317,7 +338,7 @@ class JsonSchemaFilter(JsonSchemaDefinedCapability):
             },
         }
 
-    def check_against_json_schema(self, json_text: str):
+    def check_against_json_schema(self, json_text: str | bytes):
         if "filter" not in self._config or "json_schema" not in self._config["filter"]:
             return True
         try:

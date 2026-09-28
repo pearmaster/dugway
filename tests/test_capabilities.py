@@ -9,23 +9,10 @@ from dugway.capabilities import (
     TextContentCapability,
     TextMultiContentCapability,
 )
-from dugway.expectations import FailedTestStep
+from dugway.expectations import ExpectationFailure, FailedTestStep
 from dugway.mqtt import MqttMessage, MqttSubscribe, MqttService
-from dugway.step import TestStep
-from dugway.meta import JsonSchemaValidationError
 
-
-class SourceStep(TestStep):
-    """Stands in for an earlier step that provides the given capabilities."""
-
-    def __init__(self, runner, capabilities):
-        super().__init__(runner, {"type": "source"}, capabilities)
-
-    def get_config_schema(self):
-        return True
-
-    def run(self):
-        pass
+from helpers import SourceStep
 
 
 @pytest.mark.parametrize(
@@ -101,7 +88,7 @@ def test_mqtt_message_checks_messages_from_subscription(runner, monkeypatch):
             "expect": {"count": 1, "topic": "t", "json_schema": {"const": "bye"}},
         },
     )
-    with pytest.raises(JsonSchemaValidationError):
+    with pytest.raises(ExpectationFailure):
         check.run()
 
 
@@ -125,7 +112,7 @@ def test_mqtt_message_checks_json_content(runner, monkeypatch):
             "expect": {"json_schema": {"required": ["b"]}},
         },
     )
-    with pytest.raises(JsonSchemaValidationError):
+    with pytest.raises(ExpectationFailure):
         check.run()
 
 

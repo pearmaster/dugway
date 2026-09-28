@@ -54,10 +54,7 @@ class ConvertToJson(TestStep):
         return dict()
 
     def check_json(self, json_data: dict[str, Any]):
-        if not self._js_expect.check_against_json_schema(json_data):
-            raise expectations.FailedTestStep(
-                "Message payload did not match json schema"
-            )
+        self._js_expect.validate(json_data)
 
     def run(self):
         from_step = self.get_capability(FromStep.NAME).get_step()
@@ -152,6 +149,7 @@ class JsonPath(TestStep):
             JsonMultiContentCapability.NAME
         ):
             found_source = True
+            multi_json_content_cap.raise_first_error()
             content = multi_json_content_cap.get_or_none()
             while content is not None:
                 self._search(content)
@@ -192,18 +190,24 @@ class ValueSave(TestStep):
         }
 
     def run(self):
-        source = self.from_step.get_step().find_capability(ValueCapability.NAME)
+        from_step = self.from_step.get_step()
+        source = from_step.find_capability(ValueCapability.NAME)
+        if source is None:
+            raise expectations.FailedTestStep(
+                f"The 'from' step '{from_step.get_name()}' does not provide a value"
+            )
         value = source.get()
+        suite = self._runner.get_suite()
         if var_name := self._config.get("suite", False):
-            self._runner.add_variable(var_name, value)
+            suite.add_variable(var_name, value)
         if var_name := self._config.get("case", False):
-            self._runner.current_case.add_variable(var_name, value)
+            suite.current_case.add_variable(var_name, value)
 
 
 class AddService(TestStep):
 
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__(runner, config, [self.from_step])
+        super().__init__(runner, config)
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -220,7 +224,10 @@ class AddService(TestStep):
     def run(self):
         service_name = self._config.get("name")
         service_config = self._config.get("config")
-        self._runner.add_service(service_name, service_config)
+        suite = self._runner.get_suite()
+        suite.add_service(service_name, service_config)
+        self._runner._reporter.add_service(service_name)
+        suite.get_service(service_name).setup()
 
 
 BUILTIN_STEPS = {

@@ -191,7 +191,7 @@ class RichReporter(AbstractReporter):
     def add_service(self, service_name, spinner="bouncingBar"):
         spinner = Spinner(spinner, service_name)
         if self.current_suite_tree is None:
-            self.services.append(Spinner)
+            self.services.append(spinner)
         else:
             self.current_suite_tree.add(spinner)
 
