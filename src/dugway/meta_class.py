@@ -7,7 +7,7 @@ class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
 
     def __init__(self, config: JsonConfigType, capabilities=None):
         if capabilities is None:
-            self._capabilities = dict()
+            self._capabilities = {}
         else:
             self._capabilities = {cap.name: cap for cap in capabilities}
         super().__init__(config)
@@ -25,9 +25,7 @@ class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
             raise InvalidTestConfig("Capability not found")
         return cap
 
-    def find_capability(
-        self, capability_name: str
-    ) -> JsonSchemaDefinedCapability | None:
+    def find_capability(self, capability_name: str) -> JsonSchemaDefinedCapability | None:
         try:
             cap = self._capabilities[capability_name]
         except KeyError:
@@ -46,7 +44,7 @@ class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
         This includes the schemas provided by capabilities, and a generic schema
         that applies even when this base class is specialized.
         """
-        allof_list = list()
+        allof_list = []
         for cap in self._capabilities.values():
             cap_schema = cap.get_config_schema()
             if cap_schema is not True:

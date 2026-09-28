@@ -25,9 +25,7 @@ def test_v5_clean_session_is_sent_as_clean_start(runner):
         {"type": "mqtt", "hostname": "localhost", "protocol": 5, "cleanSession": False},
     )
     calls = []
-    service.client = SimpleNamespace(
-        connect=lambda *a, **kw: calls.append(kw), loop_start=lambda: None
-    )
+    service.client = SimpleNamespace(connect=lambda *a, **kw: calls.append(kw), loop_start=lambda: None)
     service.setup()
     assert calls[0]["clean_start"] is False
 
@@ -58,9 +56,7 @@ def test_invalid_protocol_is_rejected(runner):
     ],
 )
 def test_publish_payload(runner, config, payload):
-    step = MqttPublish(
-        runner, {"type": "mqtt_publish", "service": "s", "topic": "t", **config}
-    )
+    step = MqttPublish(runner, {"type": "mqtt_publish", "service": "s", "topic": "t", **config})
     assert step._payload == payload
 
 
@@ -70,9 +66,7 @@ def test_publish_without_payload_is_rejected(runner):
 
 
 def subscription(runner, monkeypatch, **config):
-    sub = MqttSubscribe(
-        runner, {"type": "mqtt_subscribe", "service": "broker", "topic": "t", **config}
-    )
+    sub = MqttSubscribe(runner, {"type": "mqtt_subscribe", "service": "broker", "topic": "t", **config})
     monkeypatch.setattr(runner, "get_step", lambda step_id: sub)
     return sub
 
@@ -94,13 +88,9 @@ def test_non_utf8_message_fails_the_consuming_step(runner, monkeypatch):
 
 
 def test_property_filter_skips_messages_without_properties(runner, monkeypatch):
-    sub = subscription(
-        runner, monkeypatch, filter={"publishProperties": {"correlationData": "1234"}}
-    )
+    sub = subscription(runner, monkeypatch, filter={"publishProperties": {"correlationData": "1234"}})
     sub._receive_message(None, None, mqtt_message(properties=None))
-    sub._receive_message(
-        None, None, mqtt_message(properties=props.Properties(PacketTypes.PUBLISH))
-    )
+    sub._receive_message(None, None, mqtt_message(properties=props.Properties(PacketTypes.PUBLISH)))
     matching = props.Properties(PacketTypes.PUBLISH)
     matching.CorrelationData = b"1234"
     sub._receive_message(None, None, mqtt_message(properties=matching))
@@ -124,9 +114,7 @@ def test_property_filter_schema_is_validated(runner):
 def test_message_count_without_timeout(runner, monkeypatch):
     sub = subscription(runner, monkeypatch)
     sub._receive_message(None, None, mqtt_message())
-    check = MqttMessage(
-        runner, {"type": "mqtt_message", "from": "sub", "expect": {"count": 1}}
-    )
+    check = MqttMessage(runner, {"type": "mqtt_message", "from": "sub", "expect": {"count": 1}})
     check.run()
 
 

@@ -14,7 +14,7 @@ class Service(JsonSchemaDefinedObject):
     should inherit from this base class.
     """
 
-    def __init__(self, runner, config: JsonConfigType, capabilities=[]):
+    def __init__(self, runner, config: JsonConfigType, capabilities=None):
         super().__init__(config=config, capabilities=capabilities)
         self._runner = runner
         self._logger = logging.getLogger(__class__.__name__)

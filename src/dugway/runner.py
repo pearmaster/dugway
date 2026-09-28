@@ -20,20 +20,18 @@ class TestSuite(JsonSchemaDefinedObject):
     A TestSuite contains 1+ services and 1+ test cases.
     """
 
-    def __init__(
-        self, name: str, runner, config: dict[str, Any], reporter: AbstractReporter
-    ):
+    def __init__(self, name: str, runner, config: dict[str, Any], reporter: AbstractReporter):
         super().__init__(config)
         self._name = os.path.basename(name)
         self.logger = logging.getLogger(f"{self._name}TestSuite")
         self._runner = runner
-        self._services: dict[str, Service] = dict()
-        self._cases: dict[str, TestCase] = dict()
+        self._services: dict[str, Service] = {}
+        self._cases: dict[str, TestCase] = {}
         self._reporter = reporter
-        self._variables = dict()
-        for service_name, service_config in config.get("services", dict()).items():
+        self._variables = {}
+        for service_name, service_config in config.get("services", {}).items():
             self.add_service(service_name, service_config)
-        for case_key, case_config in config.get("testCases", dict()).items():
+        for case_key, case_config in config.get("testCases", {}).items():
             case_name = case_config.get("name", case_key)
             the_case = TestCase(case_name, self._runner, case_config, self._reporter)
             self._cases[case_name] = the_case
@@ -72,7 +70,6 @@ class TestSuite(JsonSchemaDefinedObject):
 
     def do_setup(self):
         for service_name, service in self._services.items():
-            self._reporter.add_service
             self._reporter.add_service(service_name)
             service.setup()
 
@@ -81,8 +78,7 @@ class TestSuite(JsonSchemaDefinedObject):
             service.teardown()
 
     def iterate_test_cases(self) -> Iterator[tuple[str, TestCase]]:
-        for case_name, test_case in self._cases.items():
-            yield (case_name, test_case)
+        yield from self._cases.items()
 
     def do_test_case_execution(self, case_name: str, test_case: TestCase) -> bool:
         self._reporter.start_case(case_name)

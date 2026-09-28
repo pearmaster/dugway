@@ -23,7 +23,7 @@ class ContentWithProperties:
 
     def __init__(self, content, properties: dict[str, Any] | None = None):
         self.content = content
-        self.properties = properties or dict()
+        self.properties = properties or {}
 
 
 class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
@@ -140,7 +140,7 @@ class JsonMultiContentCapability(JsonSchemaDefinedCapability):
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(self.NAME, runner, config)
         self._messages = Queue()
-        self.errors: list[Exception] = list()
+        self.errors: list[Exception] = []
 
     @property
     def count(self):
@@ -174,9 +174,7 @@ class JsonMultiContentCapability(JsonSchemaDefinedCapability):
         except QueueEmpty:
             return None
 
-    def add_content(
-        self, json_resp: JsonContentType, properties: dict[str, Any] | None = None
-    ):
+    def add_content(self, json_resp: JsonContentType, properties: dict[str, Any] | None = None):
         content_with_props = ContentWithProperties(json_resp, properties)
         self._messages.put(content_with_props)
 
@@ -289,7 +287,7 @@ class JsonSchemaExpectation(JsonSchemaDefinedCapability):
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(self.NAME, runner, config)
         # 'expect' is shared with other capabilities, so it may be present without a schema
-        self.json_schema = self._config.get("expect", dict()).get("json_schema")
+        self.json_schema = self._config.get("expect", {}).get("json_schema")
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -346,11 +344,11 @@ class JsonSchemaFilter(JsonSchemaDefinedCapability):
             return True
         try:
             json_value = json.loads(json_text)
-        except:
+        except ValueError:
             return False
         validator = JsonSchemaValidator(self._config["filter"]["json_schema"])
         try:
             validator.validate(json_value)
-        except Exception:
+        except JsonSchemaValidationError:
             return False
         return True

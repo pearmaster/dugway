@@ -14,13 +14,8 @@ class HttpService(Service):
 
     def __init__(self, runner, config):
         super().__init__(runner, config)
-        self._headers = {
-            k: self._runner.template_eval(v)
-            for (k, v) in config.get("headers", dict()).items()
-        }
-        self._hostname = (
-            self._runner.template_eval(config.get("hostname", "")) or "localhost"
-        )
+        self._headers = {k: self._runner.template_eval(v) for (k, v) in config.get("headers", {}).items()}
+        self._hostname = self._runner.template_eval(config.get("hostname", "")) or "localhost"
         self._tls = config.get("tls", False)
         self._port = config.get("port", 443 if self._tls else 80)
 
@@ -53,12 +48,7 @@ class HttpService(Service):
 
     def make_request(self, method: str, path: str, **httpx_kwargs):
         all_headers = copy(self._headers)
-        all_headers.update(
-            {
-                k: self._runner.template_eval(v)
-                for (k, v) in httpx_kwargs.get("headers", dict()).items()
-            }
-        )
+        all_headers.update({k: self._runner.template_eval(v) for (k, v) in httpx_kwargs.get("headers", {}).items()})
         url = self.get_url(path)
         httpx_kwargs["headers"] = all_headers
         resp = httpx.request(method, url, **httpx_kwargs)
@@ -73,7 +63,7 @@ class HttpRequest(TestStep):
         super().__init__(runner, config, [self.serv_dep, resp_cap])
         self._path = config.get("path")
         self._method = config.get("method", "GET")
-        self._expectations = config.get("expect", dict())
+        self._expectations = config.get("expect", {})
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -119,12 +109,10 @@ class HttpRequest(TestStep):
     def run(self):
         http_service = self.serv_dep.get_service()
         method = self._config.get("method", "GET")
-        self._runner._reporter.step_info(
-            f"{method} Request", http_service.get_url(self._path)
-        )
+        self._runner._reporter.step_info(f"{method} Request", http_service.get_url(self._path))
         # Copied so that adding a Content-Type doesn't modify the step's config
-        headers = dict(self._config.get("headers", dict()))
-        httpx_kwargs = dict()
+        headers = dict(self._config.get("headers", {}))
+        httpx_kwargs = {}
         # Checked by key because falsy bodies like {}, [], 0 and false are still bodies
         if "json" in self._config:
             if "content-type" not in [h.lower() for h in headers]:
@@ -140,9 +128,7 @@ class HttpRequest(TestStep):
             **httpx_kwargs,
         )
         self._runner._reporter.step_info(f"{resp.status_code} Response", resp.text)
-        if expected_status_code := self._expectations.get("status_code"):
-            if resp.status_code != expected_status_code:
-                raise ExpectationFailure(
-                    "Status code", expected_status_code, resp.status_code
-                )
+        expected_status_code = self._expectations.get("status_code")
+        if expected_status_code and resp.status_code != expected_status_code:
+            raise ExpectationFailure("Status code", expected_status_code, resp.status_code)
         self.get_capability(TextContentCapability.NAME).response_body = resp.text

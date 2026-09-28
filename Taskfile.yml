@@ -3,13 +3,19 @@ version: "3"
 tasks:
   default:
     deps:
-      - black
+      - format
       - test
+      - lint
 
-  black:
+  format:
     desc: Format code with black
     cmds:
-      - uv run black --target-version py312 src tests
+      - uv run black src tests
+
+  lint:
+    desc: Lint code with ruff
+    cmds:
+      - uv run ruff check src tests
 
   test:
     desc: Run the test suite with pytest

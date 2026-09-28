@@ -19,7 +19,6 @@ dependencies = [
     "junit-xml>=1.9",
     "protobuf-inspector>=0.2",
     "python-jsonpath>=1.2.2",
-    "ruff>=0.16.9",
 ]
 requires-python = ">=3.12"
 readme = "README.md"
@@ -48,10 +47,25 @@ dugway = 'dugway.pytest_plugin'
 [project.urls]
 Repository = "https://github.com/pearmaster/dugway"
 
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120  # keep in sync with tool.black
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Uses ruff's default rule set; adjust with extend-select / ignore.
+extend-select = []
+ignore = []
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [dependency-groups]
 dev = [
     "black>=24.0.0",
+    "ruff>=0.16.9",
 ]

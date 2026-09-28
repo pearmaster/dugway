@@ -94,7 +94,6 @@ dependencies = [
     { name = "pytest" },
     { name = "python-jsonpath" },
     { name = "rich" },
-    { name = "ruff" },
     { name = "stevedore" },
     { name = "typer" },
 ]
@@ -102,6 +101,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "black" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -117,13 +117,15 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.2.0" },
     { name = "python-jsonpath", specifier = ">=1.2.2" },
     { name = "rich", specifier = ">=13.9.4" },
-    { name = "ruff", specifier = ">=0.16.9" },
     { name = "stevedore", specifier = ">=5.1.0" },
     { name = "typer", specifier = ">=0.12.3" },
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "black", specifier = ">=24.0.0" }]
+dev = [
+    { name = "black", specifier = ">=24.0.0" },
+    { name = "ruff", specifier = ">=0.16.9" },
+]
 
 [[package]]
 name = "h11"

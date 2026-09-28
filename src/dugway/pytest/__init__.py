@@ -28,7 +28,5 @@ class DugwayYamlFile(pytest.File):
 
 
 def pytest_collect_file(parent, path):
-    if os.path.basename(path).endswith(".dugway.yaml") or os.path.basename(
-        path
-    ).endswith(".dugway.yml"):
+    if os.path.basename(path).endswith(".dugway.yaml") or os.path.basename(path).endswith(".dugway.yml"):
         return DugwayYamlFile.from_parent(parent, fspath=path)

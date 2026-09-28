@@ -88,17 +88,13 @@ class MyRichStatus:
     def r(self):
         if self.done:
             if self.failed:
-                return Text.from_markup(
-                    f":x: [bold blue]{self._status_type}[/bold blue]: [red]{self._text}[/red]"
-                )
+                return Text.from_markup(f":x: [bold blue]{self._status_type}[/bold blue]: [red]{self._text}[/red]")
             else:
                 return Text.from_markup(
                     f":white_heavy_check_mark: [bold blue]{self._status_type}[/bold blue]: [green]{self._text}[/green]"
                 )
         else:
-            return Spinner(
-                "dots", f"[bold blue]{self._status_type}[/bold blue]: {self._text}"
-            )
+            return Spinner("dots", f"[bold blue]{self._status_type}[/bold blue]: {self._text}")
 
     def finish(self, failed=False):
         self.failed = failed
@@ -123,12 +119,10 @@ def create_rich_text(data: str, line_numbers=True):
 
 def create_rich_panel(
     title: str,
-    data: (
-        str | dict[str, str] | list[str | dict[str, str]] | FailedTestStep | None
-    ) = None,
+    data: str | dict[str, str] | list[str | dict[str, str]] | FailedTestStep | None = None,
     error_panel: bool = False,
 ) -> Panel | Text | Table:
-    kwargs = dict()
+    kwargs = {}
     if error_panel:
         kwargs["style"] = "red"
     if data is None:
@@ -137,7 +131,7 @@ def create_rich_panel(
         if isinstance(data, str):
             return Panel(create_rich_text(data), title=title, width=80, **kwargs)
         elif isinstance(data, dict):
-            table = create_rich_table(data)
+            return Panel(create_rich_table(data), title=title, width=80, **kwargs)
         elif isinstance(data, list):
             return Panel(
                 create_rich_text("\n".join([str(d) for d in data]), line_numbers=False),
@@ -162,7 +156,7 @@ def try_display_raw_protobuf(data) -> str | None:
     try:
         output = parser.parse_message(f, "message")
         return output
-    except Exception:
+    except Exception:  # noqa: BLE001 - data may not be protobuf at all
         return None
 
 
@@ -198,30 +192,22 @@ class RichReporter(AbstractReporter):
         self.display.start()
 
     def end_suite(self, result):
-        self.current_suite_tree.label = self.current_suite_spinner.finish(
-            failed=(not result)
-        )
+        self.current_suite_tree.label = self.current_suite_spinner.finish(failed=(not result))
         self.display.refresh()
 
     def start_case(self, case_name: str, number_of_cases: int | None = None):
         self.current_case_spinner = MyRichStatus("Case", case_name)
-        self.current_case_tree = self.current_suite_tree.add(
-            self.current_case_spinner.r()
-        )
+        self.current_case_tree = self.current_suite_tree.add(self.current_case_spinner.r())
 
     def end_case(self, result):
-        self.current_case_tree.label = self.current_case_spinner.finish(
-            failed=(not result)
-        )
+        self.current_case_tree.label = self.current_case_spinner.finish(failed=(not result))
         if result and not self._debug:
             self.current_case_tree.expanded = False
         self.display.refresh()
 
     def start_step(self, step_name):
         self.current_step_spinner = MyRichStatus("Step", step_name)
-        self.current_step_tree = self.current_case_tree.add(
-            self.current_step_spinner.r()
-        )
+        self.current_step_tree = self.current_case_tree.add(self.current_step_spinner.r())
 
     def step_info(self, title, data):
         self.current_step_tree.add(create_rich_panel(title, data))
@@ -232,9 +218,7 @@ class RichReporter(AbstractReporter):
         self.end_step(False)
 
     def end_step(self, result):
-        self.current_step_tree.label = self.current_step_spinner.finish(
-            failed=(not result)
-        )
+        self.current_step_tree.label = self.current_step_spinner.finish(failed=(not result))
         self.display.refresh()
 
 

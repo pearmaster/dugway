@@ -19,10 +19,10 @@ class FailureCollectingReporter(NoOpReporter):
 
     def __init__(self):
         self._current_step = None
-        self.failures: list[str] = list()
+        self.failures: list[str] = []
 
     def start_case(self, case_name: str):
-        self.failures = list()
+        self.failures = []
 
     def start_step(self, step_name: str):
         self._current_step = step_name
@@ -49,9 +49,7 @@ class DugwayTestItem(pytest.Item):
         finally:
             self.parent.suite.do_teardown()
         if not passed:
-            raise DugwayCaseFailure(
-                "\n".join(self.parent.reporter.failures) or "Test case failed"
-            )
+            raise DugwayCaseFailure("\n".join(self.parent.reporter.failures) or "Test case failed")
 
     def repr_failure(self, excinfo):
         if isinstance(excinfo.value, DugwayCaseFailure):

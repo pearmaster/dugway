@@ -14,18 +14,16 @@ class TestCase(JsonSchemaDefinedObject):
     it fails.
     """
 
-    def __init__(
-        self, name: str, runner, config: JsonConfigType, reporter: AbstractReporter
-    ):
+    def __init__(self, name: str, runner, config: JsonConfigType, reporter: AbstractReporter):
         super().__init__(config)
         self._name = name
         self._runner = runner
-        self._steps_by_id = dict()
-        self._setup: list[TestStep] = list()
-        self._teardown: list[TestStep] = list()
-        self._steps: list[TestStep] = list()
+        self._steps_by_id = {}
+        self._setup: list[TestStep] = []
+        self._teardown: list[TestStep] = []
+        self._steps: list[TestStep] = []
         self._reporter = reporter
-        self._variables: dict[str, str | int | float | bool] = dict()
+        self._variables: dict[str, str | int | float | bool] = {}
         self._add_steps(config, self._steps)
         self._current_step = None
 
@@ -70,7 +68,7 @@ class TestCase(JsonSchemaDefinedObject):
         except FailedTestStep as e:
             self._reporter.step_failure(str(e), e)
             return False
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - fail the step, not the run
             self._reporter.step_failure("Exception", str(e))
             return False
         else:

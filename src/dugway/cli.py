@@ -12,9 +12,7 @@ def run(
     path: str,
     debug: Annotated[bool, typer.Option(help="Display debug info")] = False,
 ):
-    reporter = MultiReporter(
-        [RichReporter(debug=debug), JunitReporter("/tmp/junit.xml")]
-    )
+    reporter = MultiReporter([RichReporter(debug=debug), JunitReporter("/tmp/junit.xml")])
     try:
         tr = DugwayRunner(path, reporter)
     except InvalidTestConfig as e:

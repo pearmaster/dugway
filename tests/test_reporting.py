@@ -35,6 +35,7 @@ def run_cli(tmp_path, suite_text):
         [sys.executable, "-m", "dugway.cli", str(suite_file)],
         capture_output=True,
         text=True,
+        check=False,
     )
 
 

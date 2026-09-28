@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import pytest
-from helpers import SourceStep
 
 from dugway.builtin_steps import ConvertToJson, JsonPath
 from dugway.capabilities import (
@@ -12,11 +11,10 @@ from dugway.capabilities import (
 )
 from dugway.expectations import ExpectationFailure, FailedTestStep
 from dugway.mqtt import MqttMessage, MqttService, MqttSubscribe
+from helpers import SourceStep
 
 
-@pytest.mark.parametrize(
-    "cap_class", [TextMultiContentCapability, JsonMultiContentCapability]
-)
+@pytest.mark.parametrize("cap_class", [TextMultiContentCapability, JsonMultiContentCapability])
 def test_multi_content_get_or_none_returns_queued_items(runner, cap_class):
     cap = cap_class(runner, {})
     cap.add_content("first")
@@ -38,9 +36,7 @@ def test_jsonpath_reads_from_multi_json_content(runner, monkeypatch):
     multi.add_content({"a": 1})
     multi.add_content({"a": 2})
     monkeypatch.setattr(runner, "get_step", lambda step_id: SourceStep(runner, [multi]))
-    step = JsonPath(
-        runner, {"type": "jsonpath", "from": "src", "path": "$.a", "minimum": 2}
-    )
+    step = JsonPath(runner, {"type": "jsonpath", "from": "src", "path": "$.a", "minimum": 2})
     step.run()
     assert step.value_cap.get() == 1
 
@@ -50,9 +46,7 @@ def test_jsonpath_enforces_maximum(runner, monkeypatch):
     multi.add_content({"a": 1})
     multi.add_content({"a": 2})
     monkeypatch.setattr(runner, "get_step", lambda step_id: SourceStep(runner, [multi]))
-    step = JsonPath(
-        runner, {"type": "jsonpath", "from": "src", "path": "$.a", "maximum": 1}
-    )
+    step = JsonPath(runner, {"type": "jsonpath", "from": "src", "path": "$.a", "maximum": 1})
     with pytest.raises(FailedTestStep, match="Found 2 matches but only 1 are allowed"):
         step.run()
 
@@ -61,22 +55,14 @@ def test_jsonpath_enforces_minimum(runner, monkeypatch):
     multi = JsonMultiContentCapability(runner, {})
     multi.add_content({"a": 1})
     monkeypatch.setattr(runner, "get_step", lambda step_id: SourceStep(runner, [multi]))
-    step = JsonPath(
-        runner, {"type": "jsonpath", "from": "src", "path": "$.a", "minimum": 2}
-    )
-    with pytest.raises(
-        FailedTestStep, match="Only found 1 matches but 2 were required"
-    ):
+    step = JsonPath(runner, {"type": "jsonpath", "from": "src", "path": "$.a", "minimum": 2})
+    with pytest.raises(FailedTestStep, match="Only found 1 matches but 2 were required"):
         step.run()
 
 
 def test_mqtt_message_checks_messages_from_subscription(runner, monkeypatch):
-    sub = MqttSubscribe(
-        runner, {"type": "mqtt_subscribe", "service": "broker", "topic": "t"}
-    )
-    sub._receive_message(
-        None, None, SimpleNamespace(topic="t", payload=b'"hi"', properties=None)
-    )
+    sub = MqttSubscribe(runner, {"type": "mqtt_subscribe", "service": "broker", "topic": "t"})
+    sub._receive_message(None, None, SimpleNamespace(topic="t", payload=b'"hi"', properties=None))
     monkeypatch.setattr(runner, "get_step", lambda step_id: sub)
     check = MqttMessage(
         runner,
@@ -131,9 +117,7 @@ def test_mqtt_connect_properties_are_applied(runner):
         },
     )
     calls = []
-    service.client = SimpleNamespace(
-        connect=lambda *a, **kw: calls.append(kw), loop_start=lambda: None
-    )
+    service.client = SimpleNamespace(connect=lambda *a, **kw: calls.append(kw), loop_start=lambda: None)
     service.setup()
     props = calls[0]["properties"]
     assert props.SessionExpiryInterval == 30

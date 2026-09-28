@@ -53,7 +53,7 @@ class ConvertToJson(TestStep):
         )
 
     def get_config_schema(self) -> JsonSchemaType:
-        return dict()
+        return {}
 
     def check_json(self, json_data: dict[str, Any]):
         self._js_expect.validate(json_data)
@@ -64,9 +64,7 @@ class ConvertToJson(TestStep):
             resp_json = json.loads(textual.response_body)
             self.check_json(resp_json)
             self.json_content_cap.json_content = resp_json
-        elif multi_textual := from_step.find_capability(
-            TextMultiContentCapability.NAME
-        ):
+        elif multi_textual := from_step.find_capability(TextMultiContentCapability.NAME):
             content = multi_textual.get_or_none()
             while content is not None:
                 json_content = json.loads(content)
@@ -74,9 +72,7 @@ class ConvertToJson(TestStep):
                 self.json_multi_cap.add_content(json_content)
                 content = multi_textual.get_or_none()
         else:
-            raise expectations.FailedTestStep(
-                "The 'from' step did not provide a textual response body"
-            )
+            raise expectations.FailedTestStep("The 'from' step did not provide a textual response body")
 
 
 class JsonPath(TestStep):
@@ -85,9 +81,7 @@ class JsonPath(TestStep):
         self.value_cap = ValueCapability(runner, config)
         self.multi_value_cap = MultiValueCapability(runner, config)
         self.from_step = FromStep(runner, config)
-        super().__init__(
-            runner, config, [self.from_step, self.value_cap, self.multi_value_cap]
-        )
+        super().__init__(runner, config, [self.from_step, self.value_cap, self.multi_value_cap])
         self._match_count = 0
         self._match_path = "Match"
 
@@ -138,18 +132,12 @@ class JsonPath(TestStep):
 
     def run(self):
         found_source = False
-        json_content_cap = self.from_step.get_step().find_capability(
-            JsonContentCapability.NAME
-        )
+        json_content_cap = self.from_step.get_step().find_capability(JsonContentCapability.NAME)
         if json_content_cap is not None and json_content_cap.json_content is not None:
             found_source = True
             self._search(json_content_cap.json_content)
-            self._runner._reporter.step_info(
-                f"Match against '{self._match_path}'", str(self.value_cap.get())
-            )
-        if multi_json_content_cap := self.from_step.get_step().find_capability(
-            JsonMultiContentCapability.NAME
-        ):
+            self._runner._reporter.step_info(f"Match against '{self._match_path}'", str(self.value_cap.get()))
+        if multi_json_content_cap := self.from_step.get_step().find_capability(JsonMultiContentCapability.NAME):
             found_source = True
             multi_json_content_cap.raise_first_error()
             content = multi_json_content_cap.get_or_none()
@@ -165,12 +153,8 @@ class JsonPath(TestStep):
             raise expectations.FailedTestStep(
                 f"Only found {self._match_count} matches but {min_matches} were required."
             )
-        if (
-            max_matches := self._config.get("maximum")
-        ) is not None and self._match_count > max_matches:
-            raise expectations.FailedTestStep(
-                f"Found {self._match_count} matches but only {max_matches} are allowed."
-            )
+        if (max_matches := self._config.get("maximum")) is not None and self._match_count > max_matches:
+            raise expectations.FailedTestStep(f"Found {self._match_count} matches but only {max_matches} are allowed.")
 
 
 class ValueSave(TestStep):
@@ -195,9 +179,7 @@ class ValueSave(TestStep):
         from_step = self.from_step.get_step()
         source = from_step.find_capability(ValueCapability.NAME)
         if source is None:
-            raise expectations.FailedTestStep(
-                f"The 'from' step '{from_step.get_name()}' does not provide a value"
-            )
+            raise expectations.FailedTestStep(f"The 'from' step '{from_step.get_name()}' does not provide a value")
         value = source.get()
         suite = self._runner.get_suite()
         if var_name := self._config.get("suite", False):

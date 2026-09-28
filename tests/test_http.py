@@ -20,9 +20,7 @@ def sent(runner, monkeypatch):
 
 
 def request_step(runner, **config):
-    return HttpRequest(
-        runner, {"type": "http_request", "service": "api", "path": "/", **config}
-    )
+    return HttpRequest(runner, {"type": "http_request", "service": "api", "path": "/", **config})
 
 
 def test_request_headers(runner, sent):
