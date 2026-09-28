@@ -1,4 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from jacobsjsonschema.draft7 import (
@@ -14,6 +17,18 @@ JsonConfigType = dict[str, Any]
 JsonSchemaType = bool | dict[str, Any]
 JsonContentType = dict[str, Any] | list[Any] | bool | int | float | str | None
 
+_skip_config_validation: ContextVar[bool] = ContextVar("skip_config_validation", default=False)
+
+
+@contextmanager
+def without_config_validation() -> Iterator[None]:
+    """Lets objects be built from placeholder config, so their schemas can be inspected."""
+    token = _skip_config_validation.set(True)
+    try:
+        yield
+    finally:
+        _skip_config_validation.reset(token)
+
 
 class JsonSchemaDefinedClass(ABC):
     """This is an abstract base class for an object which is defined by a config dictionary,
@@ -23,7 +38,8 @@ class JsonSchemaDefinedClass(ABC):
     def __init__(self, config: JsonConfigType):
         self._config = config
         # This will throw if the config does not conform to the schema.
-        self.config_complies_with_schema(self._config)
+        if not _skip_config_validation.get():
+            self.config_complies_with_schema(self._config)
 
     @abstractmethod
     def get_config_schema(self) -> JsonSchemaType:

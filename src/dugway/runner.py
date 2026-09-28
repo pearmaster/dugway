@@ -124,14 +124,19 @@ class TestSuite(JsonSchemaDefinedObject):
         }
 
 
+def load_suite_document(filename: str):
+    """Loads a test suite YAML/JSON file, resolving its $refs."""
+    opts = ParseOptions()
+    opts.ref_resolution_mode = RefResolutionMode.RESOLVE_REFERENCES
+    return create_document(uri=filename, options=opts)
+
+
 class DugwayRunner:
 
     def __init__(self, filename, reporter: AbstractReporter):
         self.logger = logging.getLogger("DugwayRunner")
         self.logger.info("Loading test suite from %s", filename)
-        opts = ParseOptions()
-        opts.ref_resolution_mode = RefResolutionMode.RESOLVE_REFERENCES
-        self._config = create_document(uri=filename, options=opts)
+        self._config = load_suite_document(filename)
         self.globals = {
             "env": os.environ,
         }

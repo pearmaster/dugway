@@ -227,26 +227,22 @@ class JunitReporter(AbstractReporter):
     def __init__(self, filename):
         super().__init__()
         self._filename = filename
-        self.suite_name = ""
-        self.test_cases = []
-
-    def __del__(self):
-        ts = junit_xml.TestSuite(self.suite_name, self.test_cases)
-        try:
-            with open(self._filename, "w") as fp:
-                junit_xml.TestSuite.to_file(fp, [ts])
-        except NameError:
-            pass
+        self.suites: list[junit_xml.TestSuite] = []
 
     def start_suite(self, suite_name):
-        self.suite_name = suite_name
+        self.suites.append(junit_xml.TestSuite(suite_name))
+
+    def end_suite(self, result):
+        # Rewritten after each suite, so the file always holds every suite finished so far.
+        with open(self._filename, "w") as fp:
+            junit_xml.TestSuite.to_file(fp, self.suites)
 
     def start_case(self, case_name):
-        self.test_cases.append(junit_xml.TestCase(case_name))
+        self.suites[-1].test_cases.append(junit_xml.TestCase(case_name))
 
     def end_case(self, result):
         if result is False:
-            self.test_cases[-1].add_failure_info("Failed")
+            self.suites[-1].test_cases[-1].add_failure_info("Failed")
 
     def start_step(self, step_name):
         pass
