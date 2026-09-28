@@ -1,11 +1,10 @@
-
-
 import logging
 
 from .meta_class import JsonSchemaDefinedObject, JsonConfigType, JsonSchemaType
 
+
 class Service(JsonSchemaDefinedObject):
-    """ A service is a web server or MQTT broker or connection to something else.  
+    """A service is a web server or MQTT broker or connection to something else.
     It is static, meaning that it is available to all the tests and test steps without
     changing.
 
@@ -35,17 +34,15 @@ class Service(JsonSchemaDefinedObject):
         }
 
     def setup(self):
-        """ This is called once at the beginning of testing.  For example, to make a persistent connection
+        """This is called once at the beginning of testing.  For example, to make a persistent connection
         to a broker.
         """
         pass
 
     def reset(self):
-        """ This is called between tests to reset any data.  For example, to clear cookies or subscriptions.
-        """
+        """This is called between tests to reset any data.  For example, to clear cookies or subscriptions."""
         pass
 
     def teardown(self):
-        """ This is called at the end of testing.  For example, to disconnect a persistent connection.
-        """
+        """This is called at the end of testing.  For example, to disconnect a persistent connection."""
         pass

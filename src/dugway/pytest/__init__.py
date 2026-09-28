@@ -3,6 +3,7 @@ import pytest
 from dugway.runner import DugwayRunner
 from dugway.reporter import NoOpReporter
 
+
 class DugwayTestItem(pytest.Item):
 
     def __init__(self, *, spec, **kwargs):
@@ -14,6 +15,7 @@ class DugwayTestItem(pytest.Item):
         self.parent.suite.do_test_case_execution(self.name, self.spec)
         self.parent.suite.do_teardown()
 
+
 class DugwayYamlFile(pytest.File):
 
     def collect(self):
@@ -22,7 +24,9 @@ class DugwayYamlFile(pytest.File):
         for case_name, test_case in self.suite.iterate_test_cases():
             yield DugwayTestItem.from_parent(self, name=case_name, spec=test_case)
 
-def pytest_collect_file(parent, path):
-    if os.path.basename(path).endswith(".dugway.yaml") or os.path.basename(path).endswith(".dugway.yml"):
-        return DugwayYamlFile.from_parent(parent, fspath=path)
 
+def pytest_collect_file(parent, path):
+    if os.path.basename(path).endswith(".dugway.yaml") or os.path.basename(
+        path
+    ).endswith(".dugway.yml"):
+        return DugwayYamlFile.from_parent(parent, fspath=path)

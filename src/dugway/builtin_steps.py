@@ -1,18 +1,28 @@
-
 from .step import TestStep
 from .meta import JsonConfigType, JsonSchemaType
 from time import sleep
 from typing import Any
 import json
 import jsonpath
-from .capabilities import JsonContentCapability, JsonMultiContentCapability, FromStep, JsonSchemaExpectation, ValueCapability, MultiValueCapability
+from .capabilities import (
+    JsonContentCapability,
+    JsonMultiContentCapability,
+    TextContentCapability,
+    TextMultiContentCapability,
+    FromStep,
+    JsonSchemaExpectation,
+    ValueCapability,
+    MultiValueCapability,
+)
 from . import expectations
 from .service import Service
+
+
 class Sleep(TestStep):
-    
+
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(runner, config)
-        self._time_to_sleep = int(runner.template_eval(config.get('time', 1)))
+        self._time_to_sleep = int(runner.template_eval(config.get("time", 1)))
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
@@ -26,6 +36,7 @@ class Sleep(TestStep):
     def run(self):
         sleep(self._time_to_sleep)
 
+
 class ConvertToJson(TestStep):
 
     def __init__(self, runner, config: JsonConfigType):
@@ -33,30 +44,41 @@ class ConvertToJson(TestStep):
         self.json_multi_cap = JsonMultiContentCapability(runner, config)
         from_step = FromStep(runner, config)
         self._js_expect = JsonSchemaExpectation(runner, config)
-        super().__init__(runner, config, [from_step, self._js_expect, self.json_content_cap])
+        super().__init__(
+            runner,
+            config,
+            [from_step, self._js_expect, self.json_content_cap, self.json_multi_cap],
+        )
 
     def get_config_schema(self) -> JsonSchemaType:
         return dict()
 
-    def check_json(self, json_data:dict[str,Any]):
+    def check_json(self, json_data: dict[str, Any]):
         if not self._js_expect.check_against_json_schema(json_data):
-            raise expectations.FailedTestStep("Message payload did not match json schema")
-        
+            raise expectations.FailedTestStep(
+                "Message payload did not match json schema"
+            )
+
     def run(self):
-        from_step = self.get_capability("FromStep").get_step()
-        if textual := from_step.find_capability("TextContent"):
+        from_step = self.get_capability(FromStep.NAME).get_step()
+        if textual := from_step.find_capability(TextContentCapability.NAME):
             resp_json = json.loads(textual.response_body)
             self.check_json(resp_json)
             self.json_content_cap.json_content = resp_json
-        elif multi_textual := from_step.find_capability("TextMultiContent"):
-            content = self.multi_textual.get_or_none()
+        elif multi_textual := from_step.find_capability(
+            TextMultiContentCapability.NAME
+        ):
+            content = multi_textual.get_or_none()
             while content is not None:
                 json_content = json.loads(content)
                 self.check_json(json_content)
                 self.json_multi_cap.add_content(json_content)
-                content = self.multi_textual.get_or_none()
+                content = multi_textual.get_or_none()
         else:
-            raise expectations.FailedTestStep("The 'from' step did not provide a textual response body")
+            raise expectations.FailedTestStep(
+                "The 'from' step did not provide a textual response body"
+            )
+
 
 class JsonPath(TestStep):
 
@@ -64,7 +86,9 @@ class JsonPath(TestStep):
         self.value_cap = ValueCapability(runner, config)
         self.multi_value_cap = MultiValueCapability(runner, config)
         self.from_step = FromStep(runner, config)
-        super().__init__(runner, config, [self.from_step, self.value_cap, self.multi_value_cap])
+        super().__init__(
+            runner, config, [self.from_step, self.value_cap, self.multi_value_cap]
+        )
         self._match_count = 0
         self._match_path = "Match"
 
@@ -80,13 +104,9 @@ class JsonPath(TestStep):
                     "required": ["path"],
                 },
                 {
-                    "properties": {
-                        "pointer": {
-                            "type": "string"
-                        }
-                    },
+                    "properties": {"pointer": {"type": "string"}},
                     "required": ["pointer"],
-                }
+                },
             ],
             "properties": {
                 "minimum": {
@@ -96,9 +116,9 @@ class JsonPath(TestStep):
                 "maximum": {
                     "type": "integer",
                 },
-            }
+            },
         }
-        
+
     def _search(self, data):
         if path := self._config.get("path"):
             self._match_path = path
@@ -119,23 +139,39 @@ class JsonPath(TestStep):
 
     def run(self):
         found_source = False
-        if json_content_cap := self.from_step.get_step().find_capability("JsonContent"):
+        json_content_cap = self.from_step.get_step().find_capability(
+            JsonContentCapability.NAME
+        )
+        if json_content_cap is not None and json_content_cap.json_content is not None:
             found_source = True
             self._search(json_content_cap.json_content)
-            self._runner._reporter.step_info(f"Match against '{self._match_path}'", str(self.value_cap.get()))
-        if multi_json_content_cap := self.from_step.get_step().find_capability("JsonMultiContent"):
+            self._runner._reporter.step_info(
+                f"Match against '{self._match_path}'", str(self.value_cap.get())
+            )
+        if multi_json_content_cap := self.from_step.get_step().find_capability(
+            JsonMultiContentCapability.NAME
+        ):
             found_source = True
             content = multi_json_content_cap.get_or_none()
             while content is not None:
                 self._search(content)
                 content = multi_json_content_cap.get_or_none()
         if not found_source:
-            raise expectations.FailedTestStep(f"The 'from' step '{self.from_step.get_step().get_name()}' did not provide JSON content")
+            raise expectations.FailedTestStep(
+                f"The 'from' step '{self.from_step.get_step().get_name()}' did not provide JSON content"
+            )
         min_matches = self._config.get("minimum", 0)
         if self._match_count < min_matches:
-            raise expectations.FailedTestStep("Only found {self._match_count} matches but {min_matches} were required.")
-        if max_matches := self._config.get("maximum", False) and self._match_count > max_matches:
-            raise expectations.FailedTestStep("Found {self._match_count} matches but only {max_matches} are allowed.")
+            raise expectations.FailedTestStep(
+                f"Only found {self._match_count} matches but {min_matches} were required."
+            )
+        if (
+            max_matches := self._config.get("maximum")
+        ) is not None and self._match_count > max_matches:
+            raise expectations.FailedTestStep(
+                f"Found {self._match_count} matches but only {max_matches} are allowed."
+            )
+
 
 class ValueSave(TestStep):
 
@@ -154,14 +190,15 @@ class ValueSave(TestStep):
                 },
             }
         }
-    
+
     def run(self):
-        source = self.from_step.get_step().find_capability("Value")
+        source = self.from_step.get_step().find_capability(ValueCapability.NAME)
         value = source.get()
         if var_name := self._config.get("suite", False):
             self._runner.add_variable(var_name, value)
         if var_name := self._config.get("case", False):
             self._runner.current_case.add_variable(var_name, value)
+
 
 class AddService(TestStep):
 
@@ -171,26 +208,25 @@ class AddService(TestStep):
     def get_config_schema(self) -> JsonSchemaType:
         return {
             "properties": {
-                "name": {
-                    "type": "string"
-                },
+                "name": {"type": "string"},
                 "config": Service.get_generic_schema(),
             },
             "required": [
                 "name",
                 "config",
-            ]
+            ],
         }
-    
+
     def run(self):
         service_name = self._config.get("name")
         service_config = self._config.get("config")
         self._runner.add_service(service_name, service_config)
 
+
 BUILTIN_STEPS = {
-    'sleep': Sleep,
-    'json': ConvertToJson,
-    'jsonpath': JsonPath,
-    'save': ValueSave,
+    "sleep": Sleep,
+    "json": ConvertToJson,
+    "jsonpath": JsonPath,
+    "save": ValueSave,
     "service": AddService,
 }

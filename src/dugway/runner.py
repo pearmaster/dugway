@@ -1,4 +1,3 @@
-
 from typing import Any, Tuple, Iterator
 from abc import abstractmethod
 import os
@@ -17,11 +16,13 @@ from .service import Service
 
 
 class TestSuite(JsonSchemaDefinedObject):
-    """ In Dugway, a TestSuite is the largest component, being defined by a JSON/YAML file.
+    """In Dugway, a TestSuite is the largest component, being defined by a JSON/YAML file.
     A TestSuite contains 1+ services and 1+ test cases.
     """
 
-    def __init__(self, name: str, runner, config: dict[str, Any], reporter: AbstractReporter):
+    def __init__(
+        self, name: str, runner, config: dict[str, Any], reporter: AbstractReporter
+    ):
         super().__init__(config)
         self._name = os.path.basename(name)
         self.logger = logging.getLogger(f"{self._name}TestSuite")
@@ -30,28 +31,28 @@ class TestSuite(JsonSchemaDefinedObject):
         self._cases: dict[str, TestCase] = dict()
         self._reporter = reporter
         self._variables = dict()
-        for service_name, service_config in config.get('services', dict()).items():
+        for service_name, service_config in config.get("services", dict()).items():
             self.add_service(service_name, service_config)
-        for case_key, case_config in config.get('testCases', dict()).items():
-            case_name = case_config.get('name', case_key)
+        for case_key, case_config in config.get("testCases", dict()).items():
+            case_name = case_config.get("name", case_key)
             the_case = TestCase(case_name, self._runner, case_config, self._reporter)
             self._cases[case_name] = the_case
-            if setup_config := config.get('caseSetUp'):
+            if setup_config := config.get("caseSetUp"):
                 the_case.add_setup(setup_config)
-            if teardown_config := config.get('caseTearDown'):
+            if teardown_config := config.get("caseTearDown"):
                 the_case.add_teardown(teardown_config)
         self._current_case = None
 
     def add_service(self, service_name, service_config):
-        service_type = service_config.get('type')
+        service_type = service_config.get("type")
         service_mgr = driver.DriverManager(
-            namespace='dugwayservice',
+            namespace="dugwayservice",
             name=service_type,
             invoke_on_load=True,
             invoke_kwds={
                 "runner": self._runner,
                 "config": service_config,
-            }
+            },
         )
         self._services[service_name] = service_mgr.driver
 
@@ -63,7 +64,7 @@ class TestSuite(JsonSchemaDefinedObject):
     def current_case(self) -> TestCase:
         return self._current_case
 
-    def add_variable(self, var_name: str, var_value: int|str|float|bool|None):
+    def add_variable(self, var_name: str, var_value: int | str | float | bool | None):
         self._variables[var_name] = var_value
 
     def get_service(self, service_name: str) -> Service:
@@ -136,7 +137,7 @@ class DugwayRunner:
         opts.ref_resolution_mode = RefResolutionMode.RESOLVE_REFERENCES
         self._config = create_document(uri=filename, options=opts)
         self.globals = {
-            'env': os.environ,
+            "env": os.environ,
         }
         self.jinja2_env = Jinja2Environment()
         self.jinja2_env.globals.update(self.globals)
@@ -148,36 +149,41 @@ class DugwayRunner:
 
     def get_step(self, step_id: str):
         return self._suite._current_case.get_step(step_id)
-    
+
     def get_suite(self) -> TestSuite:
         return self._suite
 
-    def template_eval(self, element: str|list[Any]|dict[str,Any], context:dict[str,Any]|None=None):
+    def template_eval(
+        self,
+        element: str | list[Any] | dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ):
         if isinstance(element, str):
             template = self.jinja2_env.from_string(element)
             if context is None:
                 return template.render()
             else:
                 return template.render(context)
-        elif isinstance(element, int):
-            template = self.jinja2_env.from_string(str(element))
-            if context is None:
-                return int(template.render())
-            else:
-                return int(template.render(context))
+        # bool is a subclass of int, so it must be checked first
         elif isinstance(element, bool):
             template = self.jinja2_env.from_string(str(element))
             if context is None:
                 v = template.render()
             else:
                 v = template.render(context)
-            return v is True or v.lower == 'true' or v == 1
+            return v.strip().lower() in ("true", "1")
+        elif isinstance(element, int):
+            template = self.jinja2_env.from_string(str(element))
+            if context is None:
+                return int(template.render())
+            else:
+                return int(template.render(context))
 
-    def run(self):
-        self._suite.run()
-        
+    def run(self) -> bool:
+        return self._suite.run()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     logging.basicConfig(level=logging.ERROR)
     test_yaml = "examples/http_request.dugway.yaml"
     tr = DugwayRunner(test_yaml)

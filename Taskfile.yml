@@ -1,0 +1,12 @@
+version: "3"
+
+tasks:
+  black:
+    desc: Format code with black
+    cmds:
+      - uv run black src tests
+
+  test:
+    desc: Run the test suite with pytest
+    cmds:
+      - uv run pytest

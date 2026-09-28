@@ -33,4 +33,3 @@ def pytest_collect_file(parent, path: os.PathLike) -> Optional[DugwayFile]:
         return dugway_file
 
     return None
-

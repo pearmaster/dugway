@@ -1,4 +1,3 @@
-
 from typing import Any, LiteralString
 
 from stevedore import driver
@@ -10,13 +9,16 @@ from .reporter import AbstractReporter
 from .builtin_steps import BUILTIN_STEPS
 from .expectations import FailedTestStep
 
+
 class TestCase(JsonSchemaDefinedObject):
-    """ A test suite is made up of 1+ test cases.  Each test case contains 1+ test steps.
+    """A test suite is made up of 1+ test cases.  Each test case contains 1+ test steps.
     If all the test steps in a test case are successful, then the test case passes, otherwise
     it fails.
     """
 
-    def __init__(self, name: str, runner, config: JsonConfigType, reporter: AbstractReporter):
+    def __init__(
+        self, name: str, runner, config: JsonConfigType, reporter: AbstractReporter
+    ):
         super().__init__(config)
         self._name = name
         self._runner = runner
@@ -25,29 +27,29 @@ class TestCase(JsonSchemaDefinedObject):
         self._teardown: list[TestStep] = list()
         self._steps: list[TestStep] = list()
         self._reporter = reporter
-        self._variables: dict[str, str|int|float|bool] = dict()
+        self._variables: dict[str, str | int | float | bool] = dict()
         self._add_steps(config, self._steps)
         self._current_step = None
 
     def _add_steps(self, config, dest_list: list[TestStep]):
-        for step_config in config.get('steps', []):
-            if step_config['type'] in BUILTIN_STEPS:
-                step = BUILTIN_STEPS[step_config['type']](self._runner, step_config)
+        for step_config in config.get("steps", []):
+            if step_config["type"] in BUILTIN_STEPS:
+                step = BUILTIN_STEPS[step_config["type"]](self._runner, step_config)
                 dest_list.append(step)
-                if step_id := step_config.get('id'):
+                if step_id := step_config.get("id"):
                     self._steps_by_id[step_id] = step
             else:
                 step_mgr = driver.DriverManager(
-                    namespace='dugwayteststep',
-                    name=step_config['type'],
+                    namespace="dugwayteststep",
+                    name=step_config["type"],
                     invoke_on_load=True,
                     invoke_kwds={
                         "runner": self._runner,
                         "config": step_config,
-                    }
+                    },
                 )
                 dest_list.append(step_mgr.driver)
-                if step_id := step_config.get('id'):
+                if step_id := step_config.get("id"):
                     self._steps_by_id[step_id] = step_mgr.driver
 
     def add_setup(self, setup_config):
@@ -56,7 +58,7 @@ class TestCase(JsonSchemaDefinedObject):
     def add_teardown(self, teardown_config):
         self._add_steps(teardown_config, self._teardown)
 
-    def add_variable(self, var_name: str, var_value: str|int|float|bool):
+    def add_variable(self, var_name: str, var_value: str | int | float | bool):
         self._variables[var_name] = var_value
 
     def get_step(self, step_id: str) -> TestStep:

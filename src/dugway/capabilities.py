@@ -4,16 +4,23 @@ from queue import Queue, Empty as QueueEmpty
 
 from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from .meta import JsonSchemaDefinedClass, JsonSchemaType, JsonConfigType, JsonContentType
+from .meta import (
+    JsonSchemaDefinedClass,
+    JsonSchemaType,
+    JsonConfigType,
+    JsonContentType,
+)
+
 
 class ContentWithProperties:
 
-    def __init__(self, content, properties: dict[str, Any]|None=None):
+    def __init__(self, content, properties: dict[str, Any] | None = None):
         self.content = content
         self.properties = properties or dict()
 
+
 class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
-    
+
     def __init__(self, name: str, runner, config: dict[str, Any]):
         super().__init__(config)
         self._name = name
@@ -22,21 +29,23 @@ class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
     @property
     def name(self):
         return self._name
-    
+
     def __repr__(self) -> str:
         return f"<Capability {self._name}>"
 
 
 class JsonContentCapability(JsonSchemaDefinedCapability):
 
+    NAME = "JsonContent"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("JsonContent", runner, config)
+        super().__init__(self.NAME, runner, config)
         self._content = ContentWithProperties(None)
 
     @property
-    def json_content(self) -> JsonContentType|None:
+    def json_content(self) -> JsonContentType | None:
         return self._content.content
-    
+
     @json_content.setter
     def json_content(self, json_resp_body: JsonContentType):
         self._content.content = json_resp_body
@@ -47,24 +56,27 @@ class JsonContentCapability(JsonSchemaDefinedCapability):
     def get_config_schema(self) -> JsonSchemaType:
         return True
 
+
 class TextContentCapability(JsonSchemaDefinedCapability):
 
+    NAME = "TextContent"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("TextContent", runner, config)
+        super().__init__(self.NAME, runner, config)
         self._content = ContentWithProperties(None)
 
     @property
-    def response_body(self) -> str|None:
+    def response_body(self) -> str | None:
         return self._content.content
-    
+
     @response_body.setter
-    def response_body(self, resp_body: str, properties: dict[str, Any]|None=None):
+    def response_body(self, resp_body: str, properties: dict[str, Any] | None = None):
         self._content.content = resp_body
         if properties:
             self._content.properties = properties
 
     @property
-    def response_content(self) -> ContentWithProperties|None:
+    def response_content(self) -> ContentWithProperties | None:
         if self._content.content is None:
             return None
         return self._content
@@ -75,8 +87,10 @@ class TextContentCapability(JsonSchemaDefinedCapability):
 
 class TextMultiContentCapability(JsonSchemaDefinedCapability):
 
+    NAME = "TextMultiContent"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("TextMultiContent", runner, config)
+        super().__init__(self.NAME, runner, config)
         self._messages = Queue()
 
     @property
@@ -89,32 +103,35 @@ class TextMultiContentCapability(JsonSchemaDefinedCapability):
     def get_content(self) -> ContentWithProperties:
         return self._messages.get()
 
-    def get_or_none(self) -> str|None:
+    def get_or_none(self) -> str | None:
         content = self.get_content_or_none()
-        if content:
+        if content is not None:
             content = content.content
         return content
 
-    def get_content_or_none(self) -> ContentWithProperties|None:
+    def get_content_or_none(self) -> ContentWithProperties | None:
         try:
-            self._messages.get_nowait()
+            return self._messages.get_nowait()
         except QueueEmpty:
             return None
 
-    def add_content(self, content: str, properties: dict[str, Any]|None=None):
+    def add_content(self, content: str, properties: dict[str, Any] | None = None):
         content_with_props = ContentWithProperties(content, properties)
         self._messages.put(content_with_props)
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
-    
+
     def __repr__(self) -> str:
         return f"<TextMultiContent {self._name} {self._messages.qsize()} message count>"
 
+
 class JsonMultiContentCapability(JsonSchemaDefinedCapability):
 
+    NAME = "JsonMultiContent"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("JsonMultiContentCapability", runner, config)
+        super().__init__(self.NAME, runner, config)
         self._messages = Queue()
 
     @property
@@ -127,56 +144,64 @@ class JsonMultiContentCapability(JsonSchemaDefinedCapability):
     def get_content(self) -> ContentWithProperties:
         return self._messages.get()
 
-    def get_or_none(self) -> JsonContentType|None:
+    def get_or_none(self) -> JsonContentType | None:
         content = self.get_content_or_none()
-        if content:
+        if content is not None:
             content = content.content
         return content
 
-    def get_content_or_none(self) -> ContentWithProperties|None:
+    def get_content_or_none(self) -> ContentWithProperties | None:
         try:
-            self._messages.get_nowait()
+            return self._messages.get_nowait()
         except QueueEmpty:
             return None
 
-    def add_content(self, json_resp: JsonContentType, properties: dict[str, Any]|None=None):
+    def add_content(
+        self, json_resp: JsonContentType, properties: dict[str, Any] | None = None
+    ):
         content_with_props = ContentWithProperties(json_resp, properties)
         self._messages.put(content_with_props)
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
-    
+
     def __repr__(self) -> str:
         return f"<JsonMultiContentCapability {self._name} {self._messages.qsize()} message count>"
 
+
 class ValueCapability(JsonSchemaDefinedCapability):
 
+    NAME = "Value"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("Value", runner, config)
+        super().__init__(self.NAME, runner, config)
         self._value = None
         self._is_set = False
 
-    def get(self) -> Any|None:
+    def get(self) -> Any | None:
         return self._value
-    
+
     def set(self, value: Any):
         self._value = value
         self._is_set = True
-    
+
     @property
     def is_set(self) -> bool:
         return self._is_set
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
-    
+
     def __repr__(self) -> str:
         return f"<Value {self._value}>"
 
+
 class MultiValueCapability(JsonSchemaDefinedCapability):
 
+    NAME = "MultiValue"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("MultiValue", runner, config)
+        super().__init__(self.NAME, runner, config)
         self._value = Queue()
 
     @property
@@ -186,9 +211,9 @@ class MultiValueCapability(JsonSchemaDefinedCapability):
     def get(self) -> Any:
         return self._value.get()
 
-    def get_or_none(self) -> Any|None:
+    def get_or_none(self) -> Any | None:
         try:
-            self._value.get_nowait()
+            return self._value.get_nowait()
         except QueueEmpty:
             return None
 
@@ -197,69 +222,69 @@ class MultiValueCapability(JsonSchemaDefinedCapability):
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
-    
+
     def __repr__(self) -> str:
         return f"<MultiValue {self._name} {self._messages.qsize()} message count>"
 
+
 class ServiceDependency(JsonSchemaDefinedCapability):
 
+    NAME = "ServiceDependency"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("ServiceDependency", runner, config)
+        super().__init__(self.NAME, runner, config)
 
     def get_config_schema(self) -> JsonSchemaType:
         return {
             "type": "object",
-            "properties": {
-                "service":{
-                    "type": "string"
-                }
-            },
-            "required": ["service"]
+            "properties": {"service": {"type": "string"}},
+            "required": ["service"],
         }
 
     def get_service(self):
-        return self._runner.get_service(self._config.get('service'))
+        return self._runner.get_service(self._config.get("service"))
+
 
 class FromStep(JsonSchemaDefinedCapability):
 
+    NAME = "FromStep"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("FromStep", runner, config)
-    
+        super().__init__(self.NAME, runner, config)
+
     def get_config_schema(self) -> JsonSchemaType:
         return {
             "type": "object",
-            "properties": {
-                "from":{
-                    "type": "string"
-                }
-            },
-            "required": ["from"]
+            "properties": {"from": {"type": "string"}},
+            "required": ["from"],
         }
-    
+
     def get_step(self):
-        from_step_id = self._config.get('from')
+        from_step_id = self._config.get("from")
         return self._runner.get_step(from_step_id)
-    
+
 
 class JsonSchemaExpectation(JsonSchemaDefinedCapability):
 
+    NAME = "JsonSchemaExpect"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("JsonSchemaExpect", runner, config)
+        super().__init__(self.NAME, runner, config)
         self.json_schema = self._config["expect"]["json_schema"]
-    
+
     def get_config_schema(self) -> JsonSchemaType:
         return {
             "type": "object",
             "properties": {
-                "expect":{
+                "expect": {
                     "type": "object",
                     "properties": {
-                        "json_schema": {"type":"object"},
+                        "json_schema": {"type": "object"},
                     },
                 }
             },
         }
-    
+
     def check_against_json_schema(self, data: dict[str, Any]):
         if "expect" not in self._config and "json_schema" not in self._config["expect"]:
             return True
@@ -270,25 +295,28 @@ class JsonSchemaExpectation(JsonSchemaDefinedCapability):
             raise e
             return False
         return True
-    
+
+
 class JsonSchemaFilter(JsonSchemaDefinedCapability):
 
+    NAME = "JsonSchemaFilter"
+
     def __init__(self, runner, config: JsonConfigType):
-        super().__init__("JsonSchemaFilter", runner, config)
-    
+        super().__init__(self.NAME, runner, config)
+
     def get_config_schema(self) -> JsonSchemaType:
         return {
             "type": "object",
             "properties": {
-                "filter":{
+                "filter": {
                     "type": "object",
                     "properties": {
-                        "json_schema": {"type":"object"},
+                        "json_schema": {"type": "object"},
                     },
                 }
             },
         }
-    
+
     def check_against_json_schema(self, json_text: str):
         if "filter" not in self._config or "json_schema" not in self._config["filter"]:
             return True
