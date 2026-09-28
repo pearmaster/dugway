@@ -2,6 +2,7 @@ import json
 import logging
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from time import sleep
 from typing import Any
@@ -61,6 +62,11 @@ class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
                     "description": "Data that ties a response to its request.",
                 },
                 "contentType": {"type": "string", "description": "Content type of the payload."},
+                "userProperties": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                    "description": "User properties, as names and values.",
+                },
             },
         }
 
@@ -105,7 +111,44 @@ class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
                 return False
             if (c_t := expected_pub_props.get("contentType", False)) is not False and c_t != received("ContentType"):
                 return False
+            if expected_user_props := expected_pub_props.get("userProperties"):
+                actual_user_props = dict(received("UserProperty") or [])
+                if any(actual_user_props.get(k) != v for k, v in expected_user_props.items()):
+                    return False
         return True
+
+
+def received_properties(pub_props) -> dict[str, Any]:
+    """The MQTTv5 properties of a received message, named as in publishProperties. Properties the
+    message doesn't have are None, and user properties are a dict.
+    """
+
+    def received(prop_name):
+        return getattr(pub_props, prop_name, None)
+
+    correlation_data = received("CorrelationData")
+    return {
+        "payloadFormatIndicator": received("PayloadFormatIndicator"),
+        "messageExpiryInterval": received("MessageExpiryInterval"),
+        "responseTopic": received("ResponseTopic"),
+        "correlationData": (
+            correlation_data.decode(errors="replace") if isinstance(correlation_data, bytes) else correlation_data
+        ),
+        "contentType": received("ContentType"),
+        "userProperties": dict(received("UserProperty") or []),
+    }
+
+
+@dataclass
+class OutgoingMessage:
+    """Everything about a message that an mqtt_publish step sends."""
+
+    topic: str
+    payload: str | None
+    qos: int
+    retain: bool
+    # MQTTv5 properties, named as in publishProperties
+    properties: dict[str, Any]
 
 
 class MqttService(Service):
@@ -356,11 +399,18 @@ class MqttPublish(TestStep):
             ],
         }
 
+    def outgoing_message(self) -> OutgoingMessage:
+        """The message to publish, when the step runs."""
+        return OutgoingMessage(
+            self._topic, self._payload, self._qos, self._retain, dict(self._config.get("publishProperties", {}))
+        )
+
     def run(self):
-        pub_args = [self._topic, self._payload, self._qos, self._retain]
+        message = self.outgoing_message()
+        pub_args = [message.topic, message.payload, message.qos, message.retain]
         self._runner._reporter.step_info("MQTT Publish", pub_args)
         mqtt_service = self.get_capability(ServiceDependency.NAME).get_service()
-        if mqtt_service.is_v5 and (pub_prop_config := self._config.get("publishProperties", False)):
+        if mqtt_service.is_v5 and (pub_prop_config := message.properties):
             pub_props = props.Properties(PacketTypes.PUBLISH)
             if (p_f_i := pub_prop_config.get("payloadFormatIndicator", False)) is not False:
                 pub_props.PayloadFormatIndicator = int(p_f_i)
@@ -372,6 +422,8 @@ class MqttPublish(TestStep):
                 pub_props.CorrelationData = c_d.encode()
             if (c_t := pub_prop_config.get("contentType", False)) is not False:
                 pub_props.ContentType = str(c_t)
+            if user_props := pub_prop_config.get("userProperties"):
+                pub_props.UserProperty = [(str(k), str(v)) for k, v in user_props.items()]
             pub_args.append(pub_props)
 
         mqtt_service.publish(*pub_args)
@@ -436,18 +488,33 @@ class MqttSubscribe(TestStep):
                 message.payload,
             )
         properties = {"topic": message.topic}
+        self.check_message(deserialized_json, properties, message)
         self._json_multi.add_content(deserialized_json, properties)
+
+    def check_message(self, payload: Any, properties: dict[str, Any], message):
+        """Checks a received message that passed the filters, before it is kept. The message is
+        paho's, with its qos and MQTTv5 properties. Raising fails the step that consumes the
+        messages. Subclasses may also add to its properties.
+        """
+
+    def subscription_qos(self) -> int:
+        """The highest quality of service level to receive messages at, when the step runs."""
+        return int(self._runner.template_eval(self._config.get("qos", 0)))
+
+    def subscription_topic(self) -> str:
+        """The topic filter to subscribe to, when the step runs."""
+        return self._runner.template_eval(self._config.get("topic"))
 
     def run(self):
         mqtt_service = self.get_capability(ServiceDependency.NAME).get_service()
-        topic = self._runner.template_eval(self._config.get("topic"))
-        qos = int(self._runner.template_eval(self._config.get("qos", 0)))
+        topic = self.subscription_topic()
+        qos = self.subscription_qos()
         self._runner._reporter.step_info("MQTT Subscribe", topic)
         mqtt_service.subscribe(topic, qos, self._receive_message)
 
 
 class MqttMessage(TestStep):
-    """Checks the messages received by an mqtt_subscribe step, or the JSON from a json step.
+    """Checks the messages received by an mqtt_subscribe or asyncapi_subscribe step, or the JSON from a json step.
 
     Checked messages are removed from the subscription, so a later mqtt_message step sees only
     the messages that are left.

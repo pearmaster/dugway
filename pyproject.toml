@@ -7,7 +7,7 @@ authors = [
 ]
 dependencies = [
     "httpx>=0.25.0",
-    "jacobs-json-schema>=0.4.2",
+    "jacobs-json-schema>=0.5.0",
     "jacobs-json-doc>=0.15.0",
     "stevedore>=5.1.0",
     "paho-mqtt>=2.1.0",
@@ -35,9 +35,14 @@ build-backend = "setuptools.build_meta"
 [project.entry-points.dugwayservice]
 http = 'dugway.web:HttpService'
 mqtt = 'dugway.mqtt:MqttService'
+openapi = 'dugway.openapi:OpenApiService'
+asyncapi = 'dugway.asyncapi:AsyncApiService'
 
 [project.entry-points.dugwayteststep]
 http_request = 'dugway.web:HttpRequest'
+openapi_request = 'dugway.openapi:OpenApiRequest'
+asyncapi_publish = 'dugway.asyncapi:AsyncApiPublish'
+asyncapi_subscribe = 'dugway.asyncapi:AsyncApiSubscribe'
 mqtt_publish = 'dugway.mqtt:MqttPublish'
 mqtt_subscribe = 'dugway.mqtt:MqttSubscribe'
 mqtt_message = 'dugway.mqtt:MqttMessage'

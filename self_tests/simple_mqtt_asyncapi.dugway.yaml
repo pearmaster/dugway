@@ -1,0 +1,33 @@
+services:
+  hello:
+    type: asyncapi
+    spec: hello.asyncapi.yaml
+
+testCases:
+
+  asyncApiPingPong:
+    steps:
+      # Every message received is checked against the document's Greeting message and its bindings
+      - id: subscribe_for_pongs
+        type: asyncapi_subscribe
+        service: hello
+        operationId: receivePong
+      # Checked against the document before it is published, with qos and content type from its bindings
+      - id: ping
+        type: asyncapi_publish
+        service: hello
+        operationId: sendPing
+        json:
+          greeting: hi
+          count: 1
+      - id: check_pong
+        type: mqtt_message
+        from: subscribe_for_pongs
+        timeoutSeconds: 5
+        expect:
+          count: 1
+          topic: hello/pong
+          json_schema:
+            properties:
+              greeting:
+                const: hi

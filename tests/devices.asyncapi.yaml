@@ -1,0 +1,143 @@
+asyncapi: 3.0.0
+info:
+  title: Devices
+  version: "1.0"
+servers:
+  docs:
+    host: docs.example.com
+    protocol: http
+  broker:
+    host: "broker.example.com:{port}"
+    protocol: secure-mqtt
+    protocolVersion: "5"
+    variables:
+      port:
+        default: "8883"
+    bindings:
+      mqtt:
+        clientId: devices-tester
+        keepAlive: 30
+        sessionExpiryInterval: 120
+        lastWill:
+          topic: devices/tester/status
+          qos: 1
+          message: gone
+          retain: true
+channels:
+  status:
+    address: "devices/{deviceId}/status"
+    parameters:
+      deviceId:
+        description: The device's id
+    messages:
+      online:
+        $ref: "#/components/messages/Online"
+      offline:
+        $ref: "#/components/messages/Offline"
+  commands:
+    address: "devices/{deviceId}/commands/{kind}"
+    parameters:
+      deviceId:
+        description: The device's id
+      kind:
+        enum: [reboot, update]
+        default: reboot
+    messages:
+      command:
+        # An OpenAPI schema, given as a multi format schema, which understands nullable
+        payload:
+          schemaFormat: application/vnd.oai.openapi;version=3.0.0
+          schema:
+            type: object
+            required: [at]
+            properties:
+              at:
+                type: integer
+              note:
+                type: string
+                nullable: true
+  dynamic:
+    address: null
+  alerts:
+    address: alerts
+    messages:
+      alert:
+        $ref: "#/components/messages/Alert"
+operations:
+  receiveStatus:
+    action: receive
+    channel:
+      $ref: "#/channels/status"
+  onlineOnly:
+    action: receive
+    channel:
+      $ref: "#/channels/status"
+    messages:
+      - $ref: "#/channels/status/messages/online"
+  sendCommand:
+    action: send
+    channel:
+      $ref: "#/channels/commands"
+  sendAnything:
+    action: send
+    channel:
+      $ref: "#/channels/dynamic"
+  sendAlert:
+    action: send
+    channel:
+      $ref: "#/channels/alerts"
+    bindings:
+      mqtt:
+        qos: 1
+        retain: false
+        messageExpiryInterval: 60
+  receiveAlert:
+    action: receive
+    channel:
+      $ref: "#/channels/alerts"
+    bindings:
+      mqtt:
+        qos: 1
+        messageExpiryInterval: 60
+components:
+  messages:
+    Alert:
+      name: alert
+      payload:
+        type: object
+        required: [level]
+        properties:
+          level:
+            type: string
+      headers:
+        type: object
+        required: [source]
+        properties:
+          source:
+            type: string
+      bindings:
+        mqtt:
+          contentType: application/json
+          payloadFormatIndicator: 1
+          responseTopic: alerts/replies
+          correlationData:
+            type: string
+            pattern: "^req-"
+    Online:
+      name: online
+      payload:
+        type: object
+        required: [online, since]
+        properties:
+          online:
+            const: true
+          since:
+            type: integer
+    Offline:
+      name: offline
+      payload:
+        type: object
+        required: [online]
+        properties:
+          online:
+            const: false

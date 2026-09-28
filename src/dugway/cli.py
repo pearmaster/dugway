@@ -16,7 +16,7 @@ from .runner import DugwayRunner
 from .schema import build_suite_schema, validate_suite_file
 
 app = typer.Typer(
-    help="Dugway API testing framework, for testing HTTP and MQTT services.",
+    help="Dugway API testing framework, for testing HTTP, OpenAPI, MQTT and AsyncAPI services.",
     add_completion=False,
     no_args_is_help=True,
     rich_markup_mode="rich",

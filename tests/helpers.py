@@ -24,7 +24,7 @@ class FakeMqttClient(SimpleNamespace):
     """Stands in for paho's client, acknowledging requests the way a broker would."""
 
     def __init__(self, service, connack="Success", suback="Granted QoS 0"):
-        super().__init__(connects=[], subscribes=[])
+        super().__init__(connects=[], subscribes=[], publishes=[])
         self._service = service
         self._connack = connack
         self._suback = suback
@@ -47,3 +47,6 @@ class FakeMqttClient(SimpleNamespace):
             reason = ReasonCode(PacketTypes.SUBACK, self._suback)
             self._service._on_subscribe(self, None, mid, [reason], None)
         return mqtt_client.MQTT_ERR_SUCCESS, mid
+
+    def publish(self, **kwargs):
+        self.publishes.append(kwargs)

@@ -163,3 +163,29 @@ def test_subscribe_fails_when_broker_never_acknowledges(runner, monkeypatch):
     service = mqtt_service(runner, monkeypatch, suback=None)
     with pytest.raises(FailedTestStep, match="did not acknowledge"):
         service.subscribe("t", 0, lambda *a: None)
+
+
+def test_user_properties_are_published(runner, monkeypatch):
+    service = mqtt_service(runner, monkeypatch)
+    service.is_v5 = True
+    monkeypatch.setattr(runner, "get_service", lambda name: service)
+    MqttPublish(
+        runner,
+        {
+            "type": "mqtt_publish",
+            "service": "s",
+            "topic": "t",
+            "json": 1,
+            "publishProperties": {"userProperties": {"a": "1", "b": "2"}},
+        },
+    ).run()
+    assert service.client.publishes[-1]["properties"].UserProperty == [("a", "1"), ("b", "2")]
+
+
+def test_user_property_filter(runner, monkeypatch):
+    sub = subscription(runner, monkeypatch, filter={"publishProperties": {"userProperties": {"a": "1"}}})
+    for user_props in ([("a", "2")], [("b", "1")], [("a", "1"), ("b", "9")]):
+        received = props.Properties(PacketTypes.PUBLISH)
+        received.UserProperty = user_props
+        sub._receive_message(None, None, mqtt_message(properties=received))
+    assert sub._json_multi.count == 1

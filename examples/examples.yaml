@@ -3,6 +3,10 @@ services:
     type: http
     hostname: "{{ env.CAT_FACT_HOSTNAME | default('catfact.ninja', true) }}"
     tls: true
+  catFactsApi:
+    type: openapi
+    spec: catfact.openapi.yaml
+    baseUrl: "https://{{ env.CAT_FACT_HOSTNAME | default('catfact.ninja', true) }}"
   unsigned9_mqtt:
     type: mqtt
     hostname: '{{env.MQTT_HOSTNAME}}'
@@ -58,3 +62,23 @@ testCases:
             required:
               - fact
               - length
+
+  getAShortCatFactByOperation:
+    steps:
+      - id: get_a_short_fact
+        type: openapi_request
+        service: catFactsApi
+        operationId: getRandomFact
+        parameters:
+          max_length: 100
+        # The response is first checked against catfact.openapi.yaml, then these expectations
+        expect:
+          status_code: 200
+          json_schema:
+            properties:
+              length:
+                maximum: 100
+      - id: find_fact_length
+        type: jsonpath
+        from: get_a_short_fact
+        pointer: /length

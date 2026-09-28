@@ -1,0 +1,53 @@
+# How a client talks to simple_mqtt_service.py, which echoes each message on hello/ping to hello/pong
+# with the same content type, at qos 1. Dugway is the client: it sends pings and receives pongs.
+asyncapi: 3.0.0
+info:
+  title: Hello
+  version: "1.0"
+servers:
+  local:
+    host: localhost:1883
+    protocol: mqtt
+    protocolVersion: "5"
+channels:
+  ping:
+    address: hello/ping
+    messages:
+      greeting:
+        $ref: "#/components/messages/Greeting"
+  pong:
+    address: hello/pong
+    messages:
+      greeting:
+        $ref: "#/components/messages/Greeting"
+operations:
+  sendPing:
+    action: send
+    channel:
+      $ref: "#/channels/ping"
+    bindings:
+      mqtt:
+        qos: 1
+  receivePong:
+    action: receive
+    channel:
+      $ref: "#/channels/pong"
+    bindings:
+      mqtt:
+        qos: 1
+components:
+  messages:
+    Greeting:
+      name: greeting
+      payload:
+        type: object
+        required: [greeting, count]
+        properties:
+          greeting:
+            type: string
+          count:
+            type: integer
+            minimum: 1
+      bindings:
+        mqtt:
+          contentType: application/json

@@ -130,7 +130,7 @@ class TestSuite(JsonSchemaDefinedObject):
 
 
 def load_suite_document(filename: str):
-    """Loads a test suite YAML/JSON file, resolving its $refs."""
+    """Loads a YAML/JSON file, such as a test suite or an OpenAPI document, resolving its $refs."""
     opts = ParseOptions()
     opts.ref_resolution_mode = RefResolutionMode.RESOLVE_REFERENCES
     return create_document(uri=filename, options=opts)
@@ -142,6 +142,8 @@ class DugwayRunner:
         self.logger = logging.getLogger("DugwayRunner")
         self.logger.info("Loading test suite from %s", filename)
         self._config = load_suite_document(filename)
+        # Files a suite refers to, such as OpenAPI documents, are found relative to the suite file
+        self.suite_directory = os.path.dirname(os.path.abspath(filename))
         self.globals = {
             "env": os.environ,
         }
@@ -184,6 +186,16 @@ class DugwayRunner:
             return rendered.strip().lower() in ("true", "1")
         elif isinstance(element, int):
             return int(self.jinja2_env.from_string(str(element)).render(render_context))
+
+    def template_eval_all(self, value: Any) -> Any:
+        """Evaluates templates in every string within the value, leaving other values as they are."""
+        if isinstance(value, str):
+            return self.template_eval(value)
+        if isinstance(value, dict):
+            return {k: self.template_eval_all(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self.template_eval_all(v) for v in value]
+        return value
 
     def run(self) -> bool:
         return self._suite.run()

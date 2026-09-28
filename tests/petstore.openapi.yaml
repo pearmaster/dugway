@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: Petstore
+  version: "1.0"
+servers:
+  - url: https://{host}/v1
+    variables:
+      host:
+        default: pets.example.com
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      parameters:
+        - name: tags
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The pets
+          headers:
+            X-Total-Count:
+              required: true
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pet"
+    post:
+      operationId: addPet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewPet"
+          text/plain:
+            schema:
+              type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+        default:
+          description: An error
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /pets/{petId}:
+    parameters:
+      - name: petId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: getPet
+      parameters:
+        - name: verbose
+          in: query
+          schema:
+            type: boolean
+        - name: X-Trace
+          in: header
+          schema:
+            type: string
+        - name: session
+          in: cookie
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The pet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+        "4XX":
+          description: Client errors
+    delete:
+      operationId: deletePet
+      responses:
+        "204":
+          description: Deleted
+components:
+  schemas:
+    NewPet:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        tag:
+          type: string
+          nullable: true
+    Pet:
+      allOf:
+        - $ref: "#/components/schemas/NewPet"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: integer
+            parent:
+              $ref: "#/components/schemas/Pet"
+    Problem:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string

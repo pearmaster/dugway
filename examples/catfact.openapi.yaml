@@ -1,0 +1,34 @@
+# A small OpenAPI description of https://catfact.ninja, used by examples.yaml
+openapi: 3.0.3
+info:
+  title: Cat Facts
+  version: "1.0"
+servers:
+  - url: https://catfact.ninja
+paths:
+  /fact:
+    get:
+      operationId: getRandomFact
+      parameters:
+        - name: max_length
+          in: query
+          description: Only facts up to this many characters long.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A random cat fact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fact"
+components:
+  schemas:
+    Fact:
+      type: object
+      required: [fact, length]
+      properties:
+        fact:
+          type: string
+        length:
+          type: integer
