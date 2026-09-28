@@ -49,11 +49,18 @@ class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 1,
+                    "description": "0 when the payload is unspecified bytes, 1 when it is UTF-8 text.",
                 },
-                "messageExpiryInterval": {"type": "integer"},
-                "responseTopic": {"type": "string"},
-                "correlationData": {"type": "string"},
-                "contentType": {"type": "string"},
+                "messageExpiryInterval": {
+                    "type": "integer",
+                    "description": "Seconds before the broker discards the message if undelivered.",
+                },
+                "responseTopic": {"type": "string", "description": "Topic that a response should be sent to."},
+                "correlationData": {
+                    "type": "string",
+                    "description": "Data that ties a response to its request.",
+                },
+                "contentType": {"type": "string", "description": "Content type of the payload."},
             },
         }
 
@@ -64,7 +71,10 @@ class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
                 self._parent_json_property: {
                     "type": "object",
                     "properties": {
-                        "publishProperties": self.publish_property_schema(),
+                        "publishProperties": {
+                            **self.publish_property_schema(),
+                            "description": "MQTTv5 publish properties that must match.",
+                        },
                     },
                 },
             },
@@ -99,6 +109,10 @@ class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
 
 
 class MqttService(Service):
+    """An MQTT broker connection, which mqtt_publish and mqtt_subscribe steps use.
+
+    The service connects when it is set up, and waits for the broker to accept the connection.
+    """
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         super().__init__(runner, config)
@@ -143,42 +157,61 @@ class MqttService(Service):
             self._subacks[mid] = reason_code_list
             self._suback_lock.notify_all()
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "properties": {
                 "hostname": {
                     "type": "string",
                     "default": "localhost",
+                    "description": "Broker hostname or IP address. Templates are evaluated, "
+                    "and an empty result means localhost.",
                 },
-                "port": {"type": "integer"},
-                "tls": {"type": "boolean", "default": False},
+                "port": {"type": "integer", "default": 1883, "description": "Broker port."},
+                "tls": {"type": "boolean", "default": False, "description": "Connect using TLS."},
                 "protocol": {
                     "type": "number",
                     "enum": [3.1, 3.11, 5],
                     "default": 3.11,
+                    "description": "MQTT protocol version.",
                 },
                 "connectProperties": {
                     "type": "object",
+                    "description": "MQTTv5 properties sent when connecting.",
                     "properties": {
-                        "sessionExpiryInterval": {"type": "integer"},
-                        "receiveMaximum": {"type": "integer"},
-                        "maximumPacketSize": {"type": "integer"},
+                        "sessionExpiryInterval": {
+                            "type": "integer",
+                            "description": "Seconds the broker keeps the session after a disconnect.",
+                        },
+                        "receiveMaximum": {
+                            "type": "integer",
+                            "description": "Most QoS 1 and 2 messages the client will process at once.",
+                        },
+                        "maximumPacketSize": {
+                            "type": "integer",
+                            "description": "Largest packet, in bytes, the client will accept.",
+                        },
                     },
                 },
                 "clientId": {
                     "type": "string",
+                    "description": "Client identifier. Templates are evaluated. A random one is used if not given.",
                 },
                 "cleanSession": {
                     "type": "boolean",
+                    "description": "Start without any session the broker kept from before. "
+                    "Sent as clean start for MQTTv5.",
                 },
                 "keepAlive": {
                     "type": "integer",
+                    "default": 60,
+                    "description": "Most seconds between messages to the broker before a ping is sent.",
                 },
                 "credentials": {
                     "type": "object",
+                    "description": "Username and password to connect with. Templates are evaluated.",
                     "properties": {
-                        "username": {"type": "string"},
-                        "password": {"type": "string"},
+                        "username": {"type": "string", "description": "Username."},
+                        "password": {"type": "string", "description": "Password."},
                     },
                     "required": ["username", "password"],
                 },
@@ -266,6 +299,10 @@ class MqttService(Service):
 
 
 class MqttPublish(TestStep):
+    """Publishes a message to an MQTT broker.
+
+    Give either json for the payload, or nullPayload to send an empty message.
+    """
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
@@ -278,20 +315,28 @@ class MqttPublish(TestStep):
         else:
             self._payload = None
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "properties": {
                 "topic": {
                     "type": "string",
+                    "description": "Topic to publish to.",
                 },
-                "qos": {"type": "integer", "default": 0},
-                "retain": {"type": "boolean", "default": False},
-                "publishProperties": MqttPropertiesComparingCapability.publish_property_schema(),
+                "qos": {"type": "integer", "default": 0, "description": "Quality of service level: 0, 1 or 2."},
+                "retain": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Have the broker keep this as the topic's retained message.",
+                },
+                "publishProperties": {
+                    **MqttPropertiesComparingCapability.publish_property_schema(),
+                    "description": "MQTTv5 properties to publish with. Ignored by other protocol versions.",
+                },
             },
             "oneOf": [
                 {
                     "properties": {
-                        "json": True,
+                        "json": {"description": "The payload, which is sent as JSON."},
                     },
                     "required": ["json"],
                 },
@@ -300,6 +345,7 @@ class MqttPublish(TestStep):
                         "nullPayload": {
                             "type": "boolean",
                             "const": True,
+                            "description": "Send an empty payload.",
                         }
                     },
                     "required": ["nullPayload"],
@@ -332,6 +378,11 @@ class MqttPublish(TestStep):
 
 
 class MqttSubscribe(TestStep):
+    """Subscribes to an MQTT topic, and keeps collecting messages while later steps run.
+
+    Received messages must be JSON. An mqtt_message step that gives this step's id as 'from'
+    checks the messages received so far.
+    """
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
@@ -344,13 +395,18 @@ class MqttSubscribe(TestStep):
             [serv_dep_cap, self._json_multi, self._json_filter, self._mqtt_prop_comp],
         )
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "properties": {
                 "topic": {
                     "type": "string",
+                    "description": "Topic filter to subscribe to, which may use wildcards. Templates are evaluated.",
                 },
-                "qos": {"type": "integer", "default": 0},
+                "qos": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Highest quality of service level to receive messages at.",
+                },
             }
         }
 
@@ -391,13 +447,18 @@ class MqttSubscribe(TestStep):
 
 
 class MqttMessage(TestStep):
+    """Checks the messages received by an mqtt_subscribe step, or the JSON from a json step.
+
+    Checked messages are removed from the subscription, so a later mqtt_message step sees only
+    the messages that are left.
+    """
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         from_step = FromStep(runner, config)
         self._js_expect = JsonSchemaExpectation(runner, config)
         super().__init__(runner, config, [from_step, self._js_expect])
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "properties": {
                 "consume": {
@@ -406,16 +467,24 @@ class MqttMessage(TestStep):
                         {"type": "string", "const": "all"},
                     ],
                     "default": "all",
+                    "description": "How many received messages to check and remove. The rest are kept for later steps.",
                 },
                 "timeoutSeconds": {
                     "type": ["number", "null"],
                     "default": None,
+                    "description": "Most seconds to wait for expect.count messages. Waits indefinitely when null.",
                 },
                 "expect": {
                     "type": "object",
+                    "description": "Checks made on the messages.",
                     "properties": {
                         "count": {
                             "type": "integer",
+                            "description": "Wait until exactly this many messages have been received.",
+                        },
+                        "topic": {
+                            "type": "string",
+                            "description": "Fail unless each checked message arrived on this topic.",
                         },
                     },
                 },

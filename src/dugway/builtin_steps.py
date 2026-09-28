@@ -21,25 +21,33 @@ from .step import TestStep
 
 
 class Sleep(TestStep):
+    """Pauses the test case for a number of seconds."""
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(runner, config)
-        self._time_to_sleep = int(runner.template_eval(config.get("time", 1)))
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "properties": {
                 "time": {
-                    "type": "integer",
+                    "type": ["integer", "string"],
+                    "default": 1,
+                    "description": "Seconds to pause. Templates are evaluated.",
                 },
             },
         }
 
     def run(self):
-        sleep(self._time_to_sleep)
+        # Evaluated when run, so the time can come from a variable saved by an earlier step
+        sleep(int(self._runner.template_eval(self._config.get("time", 1))))
 
 
 class ConvertToJson(TestStep):
+    """Parses text from an earlier step, such as an HTTP response body, as JSON.
+
+    Later steps, such as jsonpath or mqtt_message, use the parsed JSON by giving this step's id as
+    'from'.
+    """
 
     def __init__(self, runner, config: JsonConfigType):
         self.json_content_cap = JsonContentCapability(runner, config)
@@ -52,7 +60,7 @@ class ConvertToJson(TestStep):
             [from_step, self._js_expect, self.json_content_cap, self.json_multi_cap],
         )
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {}
 
     def check_json(self, json_data: dict[str, Any]):
@@ -76,6 +84,11 @@ class ConvertToJson(TestStep):
 
 
 class JsonPath(TestStep):
+    """Finds values in the JSON from an earlier step, using a JSONPath or a JSON Pointer.
+
+    The first value found can be saved with a save step. Fails when fewer than minimum or more
+    than maximum values are found.
+    """
 
     def __init__(self, runner, config: JsonConfigType):
         self.value_cap = ValueCapability(runner, config)
@@ -85,19 +98,25 @@ class JsonPath(TestStep):
         self._match_count = 0
         self._match_path = "Match"
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "oneOf": [
                 {
                     "properties": {
                         "path": {
                             "type": "string",
+                            "description": "JSONPath expression to search with, such as $.items[*].id",
                         }
                     },
                     "required": ["path"],
                 },
                 {
-                    "properties": {"pointer": {"type": "string"}},
+                    "properties": {
+                        "pointer": {
+                            "type": "string",
+                            "description": "JSON Pointer to a single value, such as /items/0/id",
+                        }
+                    },
                     "required": ["pointer"],
                 },
             ],
@@ -105,9 +124,11 @@ class JsonPath(TestStep):
                 "minimum": {
                     "type": "integer",
                     "default": 0,
+                    "description": "Fail when fewer values than this are found.",
                 },
                 "maximum": {
                     "type": "integer",
+                    "description": "Fail when more values than this are found.",
                 },
             },
         }
@@ -158,19 +179,26 @@ class JsonPath(TestStep):
 
 
 class ValueSave(TestStep):
+    """Saves the value found by an earlier step, such as jsonpath, as a variable.
+
+    Later templates use a suite variable as {{ suite.name }}, for the rest of the suite, and a case
+    variable as {{ case.name }}, for the rest of the test case.
+    """
 
     def __init__(self, runner, config: JsonConfigType):
         self.from_step = FromStep(runner, config)
         super().__init__(runner, config, [self.from_step])
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "properties": {
                 "suite": {
                     "type": "string",
+                    "description": "Name of the suite variable to save the value as.",
                 },
                 "case": {
                     "type": "string",
+                    "description": "Name of the test case variable to save the value as.",
                 },
             }
         }
@@ -189,15 +217,19 @@ class ValueSave(TestStep):
 
 
 class AddService(TestStep):
+    """Adds a service partway through a test case, and sets it up."""
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(runner, config)
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "properties": {
-                "name": {"type": "string"},
-                "config": Service.get_generic_schema(),
+                "name": {"type": "string", "description": "Name that later steps use for the service."},
+                "config": {
+                    **Service.get_generic_schema(),
+                    "description": "The service's config, as it would be given under the suite's services.",
+                },
             },
             "required": [
                 "name",

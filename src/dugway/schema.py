@@ -34,10 +34,24 @@ def _registered_types(namespace: str) -> dict[str, type]:
     return {ext.name: ext.plugin for ext in manager}
 
 
-def _type_schema(cls: type, type_name: str) -> JsonSchemaType:
+def service_types() -> dict[str, type]:
+    """Every installed service type, by the name used as its 'type' in a suite file."""
+    return _registered_types("dugwayservice")
+
+
+def step_types() -> dict[str, type]:
+    """Every installed and built-in test step type, by the name used as its 'type'."""
+    return {**_registered_types("dugwayteststep"), **BUILTIN_STEPS}
+
+
+def placeholder_instance(cls: type, type_name: str) -> Any:
+    """Builds an instance of a service or step type without any real config."""
     with without_config_validation():
-        placeholder = cls(runner=_PlaceholderRunner(), config={"type": type_name})
-    return placeholder.get_config_schema()
+        return cls(runner=_PlaceholderRunner(), config={"type": type_name})
+
+
+def _type_schema(cls: type, type_name: str) -> JsonSchemaType:
+    return placeholder_instance(cls, type_name).get_config_schema()
 
 
 def _schema_by_type(types: dict[str, type], generic: JsonSchemaType) -> JsonSchemaType:
@@ -59,8 +73,8 @@ def _schema_by_type(types: dict[str, type], generic: JsonSchemaType) -> JsonSche
 
 
 def build_suite_schema() -> dict[str, Any]:
-    services = _registered_types("dugwayservice")
-    steps = {**_registered_types("dugwayteststep"), **BUILTIN_STEPS}
+    services = service_types()
+    steps = step_types()
     step_schema = _schema_by_type(steps, TestStep.get_generic_schema())
     case_schema = {
         "allOf": [

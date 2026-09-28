@@ -37,9 +37,11 @@ class TestStep(JsonSchemaDefinedObject):
             "properties": {
                 "type": {
                     "type": "string",
+                    "description": "The step type, such as http_request or sleep.",
                 },
                 "id": {
                     "type": "string",
+                    "description": "Names the step, so later steps can give it as 'from'. Also shown in reports.",
                 },
             },
             "required": [

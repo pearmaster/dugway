@@ -8,6 +8,32 @@ from jacobsjsonschema.draft7 import Validator
 from test_reporting import FAILING_SUITE, PASSING_SUITE, run_cli
 
 INVALID_SUITES = {
+    "step missing the service it uses": """
+services: {}
+testCases:
+  a:
+    steps:
+      - type: mqtt_subscribe
+        topic: t
+""",
+    "step missing the step it reads from": """
+services: {}
+testCases:
+  a:
+    steps:
+      - type: jsonpath
+        path: $.a
+""",
+    "invalid capability option": """
+services: {}
+testCases:
+  a:
+    steps:
+      - type: json
+        from: response
+        expect:
+          json_schema: not a schema
+""",
     "unknown step type": """
 services: {}
 testCases:

@@ -1,6 +1,7 @@
 import logging
 import os
 from collections.abc import Iterator
+from types import SimpleNamespace
 from typing import Any
 
 from jacobsjsondoc.document import create_document
@@ -64,6 +65,10 @@ class TestSuite(JsonSchemaDefinedObject):
 
     def add_variable(self, var_name: str, var_value: str | float | bool | None):
         self._variables[var_name] = var_value
+
+    @property
+    def variables(self) -> dict[str, Any]:
+        return self._variables
 
     def get_service(self, service_name: str) -> Service:
         return self._services[service_name]
@@ -154,31 +159,31 @@ class DugwayRunner:
     def get_suite(self) -> TestSuite:
         return self._suite
 
+    def template_variables(self) -> dict[str, SimpleNamespace]:
+        """The saved variables that templates can use, as suite.name and case.name."""
+        # Services are built while the suite is, before it has been stored here
+        suite = getattr(self, "_suite", None)
+        case = suite.current_case if suite is not None else None
+        # A namespace rather than a dict, so that names like 'items' aren't taken by dict methods
+        return {
+            "suite": SimpleNamespace(**(suite.variables if suite is not None else {})),
+            "case": SimpleNamespace(**(case.variables if case is not None else {})),
+        }
+
     def template_eval(
         self,
         element: str | list[Any] | dict[str, Any],
         context: dict[str, Any] | None = None,
     ):
+        render_context = {**self.template_variables(), **(context or {})}
         if isinstance(element, str):
-            template = self.jinja2_env.from_string(element)
-            if context is None:
-                return template.render()
-            else:
-                return template.render(context)
+            return self.jinja2_env.from_string(element).render(render_context)
         # bool is a subclass of int, so it must be checked first
         elif isinstance(element, bool):
-            template = self.jinja2_env.from_string(str(element))
-            if context is None:
-                v = template.render()
-            else:
-                v = template.render(context)
-            return v.strip().lower() in ("true", "1")
+            rendered = self.jinja2_env.from_string(str(element)).render(render_context)
+            return rendered.strip().lower() in ("true", "1")
         elif isinstance(element, int):
-            template = self.jinja2_env.from_string(str(element))
-            if context is None:
-                return int(template.render())
-            else:
-                return int(template.render(context))
+            return int(self.jinja2_env.from_string(str(element)).render(render_context))
 
     def run(self) -> bool:
         return self._suite.run()

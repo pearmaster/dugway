@@ -12,6 +12,10 @@ class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
             self._capabilities = {cap.name: cap for cap in capabilities}
         super().__init__(config)
 
+    @property
+    def capabilities(self) -> list[JsonSchemaDefinedCapability]:
+        return list(self._capabilities.values())
+
     def add_capability(self, capability: JsonSchemaDefinedCapability):
         self._capabilities[capability.name] = capability
 
@@ -37,6 +41,7 @@ class JsonSchemaDefinedObject(JsonSchemaDefinedClass):
         return True
 
     def get_object_schema(self) -> JsonSchemaType:
+        """Inheriting classes override this with the schema for their own config options."""
         return True
 
     def get_config_schema(self) -> JsonSchemaType:

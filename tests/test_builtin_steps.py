@@ -1,6 +1,6 @@
 import pytest
 
-from dugway.builtin_steps import AddService, ConvertToJson, ValueSave
+from dugway.builtin_steps import AddService, ConvertToJson, Sleep, ValueSave
 from dugway.capabilities import TextContentCapability, ValueCapability
 from dugway.expectations import ExpectationFailure, FailedTestStep
 from dugway.reporter import NoOpReporter
@@ -51,6 +51,32 @@ def test_save_step_saves_suite_and_case_variables(runner_in_case, monkeypatch):
     suite = runner_in_case.get_suite()
     assert suite._variables["s"] == 42
     assert suite.current_case._variables["c"] == 42
+
+
+def test_saved_variables_are_available_to_templates(runner_in_case, monkeypatch):
+    value = ValueCapability(runner_in_case, {})
+    value.set("abc")
+    monkeypatch.setattr(runner_in_case, "get_step", lambda step_id: SourceStep(runner_in_case, [value]))
+    ValueSave(runner_in_case, {"type": "save", "from": "src", "suite": "token", "case": "id"}).run()
+    assert runner_in_case.template_eval("{{ suite.token }}/{{ case.id }}") == "abc/abc"
+
+
+def test_variable_names_are_not_taken_by_dict_methods(runner_in_case):
+    runner_in_case.get_suite().add_variable("items", "mine")
+    assert runner_in_case.template_eval("{{ suite.items }}") == "mine"
+
+
+def test_templates_render_before_any_case_runs(runner):
+    assert runner.template_eval("[{{ suite.missing }}][{{ case.missing }}]") == "[][]"
+
+
+def test_sleep_time_is_evaluated_when_run(runner_in_case, monkeypatch):
+    slept = []
+    monkeypatch.setattr("dugway.builtin_steps.sleep", slept.append)
+    step = Sleep(runner_in_case, {"type": "sleep", "time": "{{ case.delay }}"})
+    runner_in_case.get_suite().current_case.add_variable("delay", 3)
+    step.run()
+    assert slept == [3]
 
 
 def test_save_step_from_step_without_value(runner_in_case, monkeypatch):

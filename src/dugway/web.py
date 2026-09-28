@@ -11,6 +11,10 @@ from .step import TestStep
 
 
 class HttpService(Service):
+    """An HTTP or HTTPS server, which http_request steps send requests to.
+
+    Headers given here are sent with every request, along with each request's own headers.
+    """
 
     def __init__(self, runner, config):
         super().__init__(runner, config)
@@ -28,16 +32,21 @@ class HttpService(Service):
             },
         }
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "properties": {
                 "hostname": {
                     "type": "string",
                     "default": "localhost",
+                    "description": "Server hostname or IP address. Templates are evaluated, "
+                    "and an empty result means localhost.",
                 },
-                "port": {"type": "integer"},
-                "tls": {"type": "boolean", "default": False},
-                "headers": HttpService.get_headers_schema(),
+                "port": {"type": "integer", "description": "Server port. Defaults to 443 with TLS, otherwise 80."},
+                "tls": {"type": "boolean", "default": False, "description": "Use HTTPS instead of HTTP."},
+                "headers": {
+                    **HttpService.get_headers_schema(),
+                    "description": "Headers sent with every request. Values are templates.",
+                },
             },
         }
 
@@ -56,6 +65,11 @@ class HttpService(Service):
 
 
 class HttpRequest(TestStep):
+    """Sends an HTTP request to an http service, and can check the response status code.
+
+    The response body is available to later steps, such as a json step that gives this step's id
+    as 'from'.
+    """
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         self.serv_dep = ServiceDependency(runner, config)
@@ -65,10 +79,13 @@ class HttpRequest(TestStep):
         self._method = config.get("method", "GET")
         self._expectations = config.get("expect", {})
 
-    def get_config_schema(self) -> JsonSchemaType:
+    def get_object_schema(self) -> JsonSchemaType:
         return {
             "properties": {
-                "headers": HttpService.get_headers_schema(),
+                "headers": {
+                    **HttpService.get_headers_schema(),
+                    "description": "Headers for this request, added to the service's headers. Values are templates.",
+                },
                 "method": {
                     "type": "string",
                     "enum": [
@@ -81,22 +98,35 @@ class HttpRequest(TestStep):
                         "OPTIONS",
                     ],
                     "default": "GET",
+                    "description": "HTTP method.",
                 },
                 "path": {
                     "type": "string",
+                    "description": "Request path, added to the service's address. Templates are evaluated.",
                 },
-                "follow_redirects": {"type": "boolean", "default": True},
-                "json": True,  # Allow any json
+                "follow_redirects": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Follow redirect responses.",
+                },
+                "json": {
+                    # Allow any json
+                    "description": "Request body, sent as JSON. Sets the Content-Type header to "
+                    "application/json unless a header already sets it.",
+                },
                 "content": {
                     "type": "string",  # or allow a string
+                    "description": "Request body, sent as text. Ignored when json is given.",
                 },
                 "expect": {
                     "type": "object",
+                    "description": "Checks made on the response.",
                     "properties": {
                         "status_code": {
                             "type": "integer",
                             "minimum": 200,
                             "maximum": 599,
+                            "description": "Fail unless the response has this status code.",
                         }
                     },
                 },

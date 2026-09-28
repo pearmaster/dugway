@@ -1,11 +1,16 @@
+import inspect
 import json
+import sys
 from pathlib import Path
 from sys import exit
 from typing import Annotated
 
+import questionary
 import typer
+from rich.console import Console
 
 from .expectations import InvalidTestConfig
+from .reference import Kind, UnknownType, describe, render_reference, render_type_list, summaries
 from .reporter import JunitReporter, MultiReporter, RichReporter
 from .runner import DugwayRunner
 from .schema import build_suite_schema, validate_suite_file
@@ -17,6 +22,14 @@ app = typer.Typer(
     rich_markup_mode="rich",
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+
+
+def _unwrap_paragraphs(func):
+    """Joins the lines of each docstring paragraph, since rich help keeps line breaks as written."""
+    paragraphs = inspect.cleandoc(func.__doc__).split("\n\n")
+    func.__doc__ = "\n\n".join(" ".join(paragraph.split()) for paragraph in paragraphs)
+    return func
+
 
 YamlFiles = Annotated[
     list[Path],
@@ -33,6 +46,7 @@ YamlFiles = Annotated[
 @app.command(
     epilog="Example: [cyan]dugway run --junit results.xml tests/*.yaml[/cyan]",
 )
+@_unwrap_paragraphs
 def run(
     yaml_files: YamlFiles,
     debug: Annotated[
@@ -86,6 +100,7 @@ def run(
 
 
 @app.command()
+@_unwrap_paragraphs
 def validate(yaml_files: YamlFiles):
     """Check that test suite files comply with the schema, without running them.
 
@@ -109,6 +124,7 @@ def validate(yaml_files: YamlFiles):
 @app.command(
     epilog="Example: [cyan]dugway schema > dugway.schema.json[/cyan]",
 )
+@_unwrap_paragraphs
 def schema():
     """Print the JSON Schema that test suite files must comply with.
 
@@ -116,6 +132,83 @@ def schema():
     check and complete suite files as you write them.
     """
     typer.echo(json.dumps(build_suite_schema(), indent=2))
+
+
+def _browse(console: Console, kind: Kind | None):
+    """Lets the user pick types from menus, and shows each one picked, until they stop."""
+    while True:
+        chosen_kind = (
+            kind
+            or questionary.select(
+                "What would you like help with?",
+                choices=[
+                    questionary.Choice("Services", Kind.services, description="Connections to the systems under test"),
+                    questionary.Choice(
+                        "Steps", Kind.steps, description="The actions and checks a test case is made of"
+                    ),
+                ],
+            ).ask()
+        )
+        if chosen_kind is None:
+            return
+        name = questionary.select(
+            f"Pick a {chosen_kind.singular}:",
+            choices=[questionary.Choice(n, n, description=s) for n, s in summaries(chosen_kind).items()],
+            use_search_filter=True,
+            use_jk_keys=False,
+            instruction="(arrow keys to move, type to filter)",
+        ).ask()
+        if name is None:
+            return
+        console.print(render_reference(describe(chosen_kind, name)))
+        if not questionary.confirm("Look up another?", default=False).ask():
+            return
+
+
+def _is_interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+@app.command(
+    "help",
+    epilog="Examples: [cyan]dugway help[/cyan], [cyan]dugway help steps[/cyan], "
+    "[cyan]dugway help services mqtt[/cyan]",
+)
+@_unwrap_paragraphs
+def help_(
+    kind: Annotated[
+        Kind | None,
+        typer.Argument(help="Which kind of type to look up.", show_default=False),
+    ] = None,
+    name: Annotated[
+        str | None,
+        typer.Argument(
+            help="The type's name, as given for 'type' in a suite file.",
+            show_default=False,
+        ),
+    ] = None,
+):
+    """Browse the service and test step types, and the options each one accepts.
+
+    With no arguments, pick services or steps and then a type from menus, and its summary and
+    options are shown. Give the kind, or the kind and a type name, to skip those menus.
+
+    When not run in a terminal, the available types are listed instead of prompting.
+    """
+    console = Console()
+    if kind is not None and name is not None:
+        try:
+            console.print(render_reference(describe(kind, name)))
+        except UnknownType:
+            raise typer.BadParameter(
+                f"there is no {kind.singular} type named '{name}'. " f"Choose from: {', '.join(summaries(kind))}",
+                param_hint="'NAME'",
+            ) from None
+    elif _is_interactive():
+        _browse(console, kind)
+    else:
+        for listed_kind in [kind] if kind else list(Kind):
+            console.print(render_type_list(listed_kind))
 
 
 def entrypoint():

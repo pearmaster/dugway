@@ -13,7 +13,7 @@ class SourceStep(TestStep):
     def __init__(self, runner, capabilities):
         super().__init__(runner, {"type": "source"}, capabilities)
 
-    def get_config_schema(self):
+    def get_object_schema(self):
         return True
 
     def run(self):

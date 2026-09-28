@@ -26,6 +26,7 @@ class Service(JsonSchemaDefinedObject):
             "properties": {
                 "type": {
                     "type": "string",
+                    "description": "The service type, such as mqtt or http.",
                 },
             },
             "required": [

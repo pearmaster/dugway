@@ -57,6 +57,10 @@ class TestCase(JsonSchemaDefinedObject):
     def add_variable(self, var_name: str, var_value: str | float | bool):
         self._variables[var_name] = var_value
 
+    @property
+    def variables(self) -> dict[str, str | int | float | bool]:
+        return self._variables
+
     def get_step(self, step_id: str) -> TestStep:
         return self._steps_by_id[step_id]
 

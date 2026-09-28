@@ -253,7 +253,12 @@ class ServiceDependency(JsonSchemaDefinedCapability):
     def get_config_schema(self) -> JsonSchemaType:
         return {
             "type": "object",
-            "properties": {"service": {"type": "string"}},
+            "properties": {
+                "service": {
+                    "type": "string",
+                    "description": "Name of the service to use, as given under the suite's services.",
+                }
+            },
             "required": ["service"],
         }
 
@@ -271,7 +276,12 @@ class FromStep(JsonSchemaDefinedCapability):
     def get_config_schema(self) -> JsonSchemaType:
         return {
             "type": "object",
-            "properties": {"from": {"type": "string"}},
+            "properties": {
+                "from": {
+                    "type": "string",
+                    "description": "The id of an earlier step in this test case, whose output this step uses.",
+                }
+            },
             "required": ["from"],
         }
 
@@ -295,8 +305,12 @@ class JsonSchemaExpectation(JsonSchemaDefinedCapability):
             "properties": {
                 "expect": {
                     "type": "object",
+                    "description": "Checks made on the content.",
                     "properties": {
-                        "json_schema": {"type": "object"},
+                        "json_schema": {
+                            "type": "object",
+                            "description": "Fail unless the JSON matches this JSON Schema.",
+                        },
                     },
                 }
             },
@@ -332,8 +346,12 @@ class JsonSchemaFilter(JsonSchemaDefinedCapability):
             "properties": {
                 "filter": {
                     "type": "object",
+                    "description": "Ignore received messages that don't match.",
                     "properties": {
-                        "json_schema": {"type": "object"},
+                        "json_schema": {
+                            "type": "object",
+                            "description": "Keep only messages whose JSON matches this JSON Schema.",
+                        },
                     },
                 }
             },
