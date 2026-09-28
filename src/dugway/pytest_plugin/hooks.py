@@ -1,17 +1,12 @@
-import logging
-import logging.config
-from typing import Optional
-import os
-import re
 import pathlib
+import re
 
-import pytest
-
-from .file import DugwayFile
 import dugway.expectations
 
+from .file import DugwayFile
 
-def pytest_collect_file(parent, path: os.PathLike) -> Optional[DugwayFile]:
+
+def pytest_collect_file(parent, file_path: pathlib.Path) -> DugwayFile | None:
     """On collecting files, get any files that end in .dugway.yaml or .dugway.yml as dugway
     test files
     """
@@ -25,11 +20,9 @@ def pytest_collect_file(parent, path: os.PathLike) -> Optional[DugwayFile]:
 
     match_dugway_file = compiled.search
 
-    path = pathlib.Path(path)
-
-    if match_dugway_file(str(path)):
-        print(f"Loading {path}")
-        dugway_file = DugwayFile.from_parent(parent, path=path)
+    if match_dugway_file(str(file_path)):
+        print(f"Loading {file_path}")
+        dugway_file = DugwayFile.from_parent(parent, path=file_path)
         return dugway_file
 
     return None

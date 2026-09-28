@@ -2,10 +2,12 @@
 Using example from https://docs.pytest.org/en/latest/example/nonpython.html#yaml-plugin
 """
 
+from collections.abc import Iterator
+
 import pytest
-from dugway.runner import DugwayRunner
+
 from dugway.reporter import NoOpReporter
-from typing import Iterator
+from dugway.runner import DugwayRunner
 
 
 class DugwayCaseFailure(Exception):

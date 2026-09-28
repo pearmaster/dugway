@@ -1,6 +1,6 @@
 import logging
 
-from .meta_class import JsonSchemaDefinedObject, JsonConfigType, JsonSchemaType
+from .meta_class import JsonConfigType, JsonSchemaDefinedObject, JsonSchemaType
 
 
 class Service(JsonSchemaDefinedObject):
@@ -37,12 +37,9 @@ class Service(JsonSchemaDefinedObject):
         """This is called once at the beginning of testing.  For example, to make a persistent connection
         to a broker.
         """
-        pass
 
     def reset(self):
         """This is called between tests to reset any data.  For example, to clear cookies or subscriptions."""
-        pass
 
     def teardown(self):
         """This is called at the end of testing.  For example, to disconnect a persistent connection."""
-        pass

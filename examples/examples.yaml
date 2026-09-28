@@ -1,7 +1,7 @@
 services:
   catFacts:
     type: http
-    hostname: '{{env.CAT_FACT_HOSTNAME}}'
+    hostname: "{{ env.CAT_FACT_HOSTNAME | default('catfact.ninja', true) }}"
     tls: true
   unsigned9_mqtt:
     type: mqtt

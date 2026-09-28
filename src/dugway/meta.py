@@ -1,9 +1,13 @@
-from typing import Any
 from abc import ABC, abstractmethod
+from typing import Any
+
 from jacobsjsonschema.draft7 import (
-    Validator as JsonSchemaValidator,
     JsonSchemaValidationError,
 )
+from jacobsjsonschema.draft7 import (
+    Validator as JsonSchemaValidator,
+)
+
 from .expectations import InvalidTestConfig
 
 JsonConfigType = dict[str, Any]

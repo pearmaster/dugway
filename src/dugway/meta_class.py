@@ -1,6 +1,6 @@
-from .meta import JsonSchemaDefinedClass, JsonConfigType, JsonSchemaType
 from .capabilities import JsonSchemaDefinedCapability
 from .expectations import InvalidTestConfig
+from .meta import JsonConfigType, JsonSchemaDefinedClass, JsonSchemaType
 
 
 class JsonSchemaDefinedObject(JsonSchemaDefinedClass):

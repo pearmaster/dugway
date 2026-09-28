@@ -1,29 +1,29 @@
-from typing import Callable, Any
 import json
+import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from time import sleep
-import logging
+from typing import Any
 
 import paho.mqtt.client as mqtt_client
-from paho.mqtt.enums import CallbackAPIVersion, MQTTProtocolVersion
 import paho.mqtt.properties as props
+from paho.mqtt.enums import CallbackAPIVersion, MQTTProtocolVersion
 from paho.mqtt.packettypes import PacketTypes
-from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
+from . import expectations
+from .capabilities import (
+    FromStep,
+    JsonContentCapability,
+    JsonMultiContentCapability,
+    JsonSchemaDefinedCapability,
+    JsonSchemaExpectation,
+    JsonSchemaFilter,
+    ServiceDependency,
+)
+from .meta import JsonConfigType, JsonSchemaType
 from .runner import DugwayRunner
 from .service import Service
 from .step import TestStep
-from .meta import JsonConfigType, JsonSchemaType
-from .capabilities import (
-    JsonSchemaDefinedCapability,
-    ServiceDependency,
-    JsonMultiContentCapability,
-    JsonContentCapability,
-    FromStep,
-    JsonSchemaExpectation,
-    JsonSchemaFilter,
-)
-from . import expectations
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +130,7 @@ class MqttService(Service):
             "properties": {
                 "hostname": {
                     "type": "string",
+                    "default": "localhost",
                 },
                 "port": {"type": "integer"},
                 "tls": {"type": "boolean", "default": False},
@@ -164,14 +165,11 @@ class MqttService(Service):
                     "required": ["username", "password"],
                 },
             },
-            "required": [
-                "hostname",
-            ],
         }
 
     def setup(self):
         args = [
-            self._runner.template_eval(self._config["hostname"]),
+            self._runner.template_eval(self._config.get("hostname", "")) or "localhost",
             int(self._runner.template_eval(self._config.get("port", 1883))),
             self._config.get("keepAlive", 60),
         ]
@@ -280,7 +278,7 @@ class MqttPublish(TestStep):
 
     def run(self):
         pub_args = [self._topic, self._payload, self._qos, self._retain]
-        self._runner._reporter.step_info(f"MQTT Publish", pub_args)
+        self._runner._reporter.step_info("MQTT Publish", pub_args)
         mqtt_service = self.get_capability(ServiceDependency.NAME).get_service()
         if mqtt_service.is_v5 and (
             pub_prop_config := self._config.get("publishProperties", False)
@@ -366,7 +364,7 @@ class MqttSubscribe(TestStep):
         mqtt_service = self.get_capability(ServiceDependency.NAME).get_service()
         topic = self._runner.template_eval(self._config.get("topic"))
         qos = int(self._runner.template_eval(self._config.get("qos", 0)))
-        self._runner._reporter.step_info(f"MQTT Subscribe", topic)
+        self._runner._reporter.step_info("MQTT Subscribe", topic)
         mqtt_service.subscribe(topic, qos, self._receive_message)
 
 

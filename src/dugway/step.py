@@ -1,9 +1,9 @@
-from abc import abstractmethod
 import logging
+from abc import abstractmethod
 
+from .capabilities import JsonSchemaDefinedCapability
 from .meta import JsonConfigType, JsonSchemaType
 from .meta_class import JsonSchemaDefinedObject
-from .capabilities import JsonSchemaDefinedCapability
 
 
 class TestStep(JsonSchemaDefinedObject):

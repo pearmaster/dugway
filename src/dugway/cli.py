@@ -1,9 +1,11 @@
-from .runner import DugwayRunner
-from .reporter import MultiReporter, RichReporter, JunitReporter
-from .expectations import InvalidTestConfig
-import typer
-from typing_extensions import Annotated
 from sys import exit
+from typing import Annotated
+
+import typer
+
+from .expectations import InvalidTestConfig
+from .reporter import JunitReporter, MultiReporter, RichReporter
+from .runner import DugwayRunner
 
 
 def run(

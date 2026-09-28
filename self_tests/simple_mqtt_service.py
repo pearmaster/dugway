@@ -1,11 +1,11 @@
+import logging
+
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import (
     CallbackAPIVersion,
     MQTTProtocolVersion,
 )
-from paho.mqtt.reasoncodes import ReasonCode
 from paho.mqtt.packettypes import PacketTypes
-import logging
 
 # MQTT broker details
 broker_address = "localhost"

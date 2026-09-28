@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from helpers import SourceStep
 
 from dugway.builtin_steps import ConvertToJson, JsonPath
 from dugway.capabilities import (
@@ -10,9 +11,7 @@ from dugway.capabilities import (
     TextMultiContentCapability,
 )
 from dugway.expectations import ExpectationFailure, FailedTestStep
-from dugway.mqtt import MqttMessage, MqttSubscribe, MqttService
-
-from helpers import SourceStep
+from dugway.mqtt import MqttMessage, MqttService, MqttSubscribe
 
 
 @pytest.mark.parametrize(

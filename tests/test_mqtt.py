@@ -1,8 +1,8 @@
-from types import SimpleNamespace
 import warnings
+from types import SimpleNamespace
 
-import pytest
 import paho.mqtt.properties as props
+import pytest
 from paho.mqtt.packettypes import PacketTypes
 
 from dugway.expectations import ExpectationFailure, InvalidTestConfig

@@ -1,17 +1,17 @@
-from typing import Any, Tuple, Iterator
-from abc import abstractmethod
-import os
 import logging
+import os
+from collections.abc import Iterator
+from typing import Any
 
 from jacobsjsondoc.document import create_document
 from jacobsjsondoc.options import ParseOptions, RefResolutionMode
-from stevedore import driver
 from jinja2 import Environment as Jinja2Environment
+from stevedore import driver
 
-from .meta import JsonSchemaType, JsonConfigType
+from .case import TestCase
+from .meta import JsonSchemaType
 from .meta_class import JsonSchemaDefinedObject
 from .reporter import AbstractReporter
-from .case import TestCase
 from .service import Service
 
 
@@ -64,7 +64,7 @@ class TestSuite(JsonSchemaDefinedObject):
     def current_case(self) -> TestCase:
         return self._current_case
 
-    def add_variable(self, var_name: str, var_value: int | str | float | bool | None):
+    def add_variable(self, var_name: str, var_value: str | float | bool | None):
         self._variables[var_name] = var_value
 
     def get_service(self, service_name: str) -> Service:
@@ -80,7 +80,7 @@ class TestSuite(JsonSchemaDefinedObject):
         for service in self._services.values():
             service.teardown()
 
-    def iterate_test_cases(self) -> Iterator[Tuple[str, TestCase]]:
+    def iterate_test_cases(self) -> Iterator[tuple[str, TestCase]]:
         for case_name, test_case in self._cases.items():
             yield (case_name, test_case)
 

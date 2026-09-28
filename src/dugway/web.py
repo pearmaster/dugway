@@ -1,15 +1,13 @@
-from typing import Any
 from copy import copy
 
 import httpx
-from jacobsjsonschema.draft7 import Validator as JsonSchemaValidator
 
-from .step import TestStep
-from .runner import DugwayRunner
-from .service import Service
-from .meta import JsonSchemaType, JsonConfigType
 from .capabilities import ServiceDependency, TextContentCapability
 from .expectations import ExpectationFailure
+from .meta import JsonConfigType, JsonSchemaType
+from .runner import DugwayRunner
+from .service import Service
+from .step import TestStep
 
 
 class HttpService(Service):
@@ -20,7 +18,9 @@ class HttpService(Service):
             k: self._runner.template_eval(v)
             for (k, v) in config.get("headers", dict()).items()
         }
-        self._hostname = self._runner.template_eval(config.get("hostname"))
+        self._hostname = (
+            self._runner.template_eval(config.get("hostname", "")) or "localhost"
+        )
         self._tls = config.get("tls", False)
         self._port = config.get("port", 443 if self._tls else 80)
 
@@ -38,14 +38,12 @@ class HttpService(Service):
             "properties": {
                 "hostname": {
                     "type": "string",
+                    "default": "localhost",
                 },
                 "port": {"type": "integer"},
                 "tls": {"type": "boolean", "default": False},
                 "headers": HttpService.get_headers_schema(),
             },
-            "required": [
-                "hostname",
-            ],
         }
 
     def get_url(self, path: str) -> str:
@@ -129,7 +127,7 @@ class HttpRequest(TestStep):
         httpx_kwargs = dict()
         # Checked by key because falsy bodies like {}, [], 0 and false are still bodies
         if "json" in self._config:
-            if "content-type" not in [h.lower() for h in headers.keys()]:
+            if "content-type" not in [h.lower() for h in headers]:
                 headers["Content-Type"] = "application/json"
             httpx_kwargs["json"] = self._config["json"]
         elif "content" in self._config:

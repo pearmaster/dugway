@@ -1,24 +1,18 @@
 from abc import ABC, abstractmethod
-from functools import partial
 from io import StringIO
 
 import junit_xml
-from rich.tree import Tree
-from rich.live import Live
-from rich.spinner import Spinner
-from rich.console import Console
-from rich.text import Text
-from rich.emoji import Emoji
-from rich.progress_bar import ProgressBar
-from rich.columns import Columns
-from rich.panel import Panel
-from rich.table import Table
-from rich.syntax import Syntax
-from rich.traceback import Traceback
-from rich import print
 from protobuf_inspector.types import StandardParser as ProtobufParser
+from rich.live import Live
+from rich.panel import Panel
+from rich.spinner import Spinner
+from rich.syntax import Syntax
+from rich.table import Table
+from rich.text import Text
+from rich.traceback import Traceback
+from rich.tree import Tree
 
-from .expectations import FailedTestStep, ExpectationFailure
+from .expectations import FailedTestStep
 
 
 class AbstractReporter(ABC):
@@ -175,7 +169,7 @@ def try_display_raw_protobuf(data) -> str | None:
 class RichReporter(AbstractReporter):
 
     def __init__(self, debug=False):
-        super(RichReporter, self).__init__()
+        super().__init__()
         self._debug = debug
         self.tree = Tree("Dugway")
         self.tree.hide_root = True

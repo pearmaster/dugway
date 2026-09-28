@@ -1,4 +1,5 @@
 import pytest
+from helpers import SourceStep
 
 from dugway.builtin_steps import AddService, ConvertToJson, ValueSave
 from dugway.capabilities import TextContentCapability, ValueCapability
@@ -6,8 +7,6 @@ from dugway.expectations import ExpectationFailure, FailedTestStep
 from dugway.reporter import NoOpReporter
 from dugway.runner import DugwayRunner
 from dugway.web import HttpService
-
-from helpers import SourceStep
 
 
 @pytest.fixture

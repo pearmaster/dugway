@@ -1,4 +1,3 @@
-import os
 import pytest
 
 
@@ -6,7 +5,6 @@ class DugwayYamlFile(pytest.File):
 
     def collect(self):
         print("****Collecting Tests")
-        pass
 
 
 def pytest_runtest_setup(item):

@@ -1,7 +1,9 @@
 import os
+
 import pytest
-from dugway.runner import DugwayRunner
+
 from dugway.reporter import NoOpReporter
+from dugway.runner import DugwayRunner
 
 
 class DugwayTestItem(pytest.Item):

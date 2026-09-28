@@ -1,19 +1,22 @@
-from typing import Any
 import json
-from queue import Queue, Empty as QueueEmpty
+from queue import Empty as QueueEmpty
+from queue import Queue
+from typing import Any
 
 from jacobsjsonschema.draft7 import (
-    Validator as JsonSchemaValidator,
     JsonSchemaValidationError,
 )
+from jacobsjsonschema.draft7 import (
+    Validator as JsonSchemaValidator,
+)
 
+from .expectations import ExpectationFailure
 from .meta import (
-    JsonSchemaDefinedClass,
-    JsonSchemaType,
     JsonConfigType,
     JsonContentType,
+    JsonSchemaDefinedClass,
+    JsonSchemaType,
 )
-from .expectations import ExpectationFailure
 
 
 class ContentWithProperties:
@@ -348,6 +351,6 @@ class JsonSchemaFilter(JsonSchemaDefinedCapability):
         validator = JsonSchemaValidator(self._config["filter"]["json_schema"])
         try:
             validator.validate(json_value)
-        except Exception as e:
+        except Exception:
             return False
         return True

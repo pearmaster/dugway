@@ -1,13 +1,11 @@
-from typing import Any
-
 from stevedore import driver
 
-from .meta_class import JsonSchemaDefinedObject
-from .step import TestStep
-from .meta import JsonConfigType, JsonSchemaType
-from .reporter import AbstractReporter
 from .builtin_steps import BUILTIN_STEPS
 from .expectations import FailedTestStep
+from .meta import JsonConfigType, JsonSchemaType
+from .meta_class import JsonSchemaDefinedObject
+from .reporter import AbstractReporter
+from .step import TestStep
 
 
 class TestCase(JsonSchemaDefinedObject):
@@ -58,7 +56,7 @@ class TestCase(JsonSchemaDefinedObject):
     def add_teardown(self, teardown_config):
         self._add_steps(teardown_config, self._teardown)
 
-    def add_variable(self, var_name: str, var_value: str | int | float | bool):
+    def add_variable(self, var_name: str, var_value: str | float | bool):
         self._variables[var_name] = var_value
 
     def get_step(self, step_id: str) -> TestStep:

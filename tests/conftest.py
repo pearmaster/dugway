@@ -1,7 +1,7 @@
 import pytest
 
-from dugway.runner import DugwayRunner
 from dugway.reporter import NoOpReporter
+from dugway.runner import DugwayRunner
 
 pytest_plugins = ["pytester"]
 

@@ -1,21 +1,23 @@
-from .step import TestStep
-from .meta import JsonConfigType, JsonSchemaType
+import json
 from time import sleep
 from typing import Any
-import json
+
 import jsonpath
+
+from . import expectations
 from .capabilities import (
+    FromStep,
     JsonContentCapability,
     JsonMultiContentCapability,
+    JsonSchemaExpectation,
+    MultiValueCapability,
     TextContentCapability,
     TextMultiContentCapability,
-    FromStep,
-    JsonSchemaExpectation,
     ValueCapability,
-    MultiValueCapability,
 )
-from . import expectations
+from .meta import JsonConfigType, JsonSchemaType
 from .service import Service
+from .step import TestStep
 
 
 class Sleep(TestStep):
