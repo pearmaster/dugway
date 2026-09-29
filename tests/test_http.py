@@ -1,7 +1,12 @@
+import json
+
 import httpx
 import pytest
 
+from dugway.capabilities import RawContentCapability, ValueCapability
+from dugway.expectations import FailedTestStep, InvalidTestConfig
 from dugway.web import HttpRequest, HttpService
+from helpers import SourceStep
 
 
 @pytest.fixture
@@ -29,13 +34,46 @@ def test_request_headers(runner, sent):
 
 
 @pytest.mark.parametrize("body", [{}, [], 0, False])
-def test_falsy_json_body_is_sent(runner, sent, body):
-    request_step(runner, method="POST", json=body).run()
-    assert sent[0]["json"] == body
+def test_falsy_payload_is_sent(runner, sent, body):
+    request_step(runner, method="POST", payload=body).run()
+    assert json.loads(sent[0]["content"]) == body
     assert sent[0]["headers"]["Content-Type"] == "application/json"
 
 
 def test_request_does_not_modify_its_config(runner, sent):
-    step = request_step(runner, method="POST", headers={}, json={"a": 1})
+    step = request_step(runner, method="POST", headers={}, payload={"a": 1})
     step.run()
     assert step._config["headers"] == {}
+
+
+def test_payload_and_from_cannot_both_be_given(runner):
+    with pytest.raises(InvalidTestConfig):
+        request_step(runner, method="POST", payload={}, **{"from": "earlier"})
+
+
+def earlier_step(runner, monkeypatch, *capabilities):
+    monkeypatch.setattr(runner, "get_step", lambda step_id: SourceStep(runner, list(capabilities)))
+
+
+def test_content_from_an_earlier_step_is_sent_as_it_is(runner, sent, monkeypatch):
+    raw = RawContentCapability(runner, {})
+    raw.set_content(b"a,b", {"contentType": "text/csv"})
+    earlier_step(runner, monkeypatch, raw)
+    request_step(runner, method="POST", **{"from": "earlier"}).run()
+    assert sent[0]["content"] == b"a,b"
+    assert sent[0]["headers"]["Content-Type"] == "text/csv"
+
+
+def test_value_from_an_earlier_step_is_serialized(runner, sent, monkeypatch):
+    value = ValueCapability(runner, {})
+    value.set({"id": 7})
+    earlier_step(runner, monkeypatch, value)
+    request_step(runner, method="POST", **{"from": "earlier"}).run()
+    assert json.loads(sent[0]["content"]) == {"id": 7}
+    assert sent[0]["headers"]["Content-Type"] == "application/json"
+
+
+def test_from_a_step_without_content_or_a_value(runner, sent, monkeypatch):
+    earlier_step(runner, monkeypatch, ValueCapability(runner, {}))
+    with pytest.raises(FailedTestStep, match="did not provide content or a value"):
+        request_step(runner, method="POST", **{"from": "earlier"}).run()

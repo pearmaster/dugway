@@ -1,6 +1,6 @@
 """Builds the complete JSON Schema for a Dugway test suite file.
 
-Each service and test step type only reveals its schema from an instance, so a placeholder
+Each service, converter and test step type only reveals its schema from an instance, so a placeholder
 instance of every registered type is built, with config validation switched off, and its
 schema is included for suite entries of that type.
 """
@@ -13,6 +13,7 @@ from stevedore import ExtensionManager
 
 from .builtin_steps import BUILTIN_STEPS
 from .case import TestCase
+from .converter import Converter
 from .expectations import InvalidTestConfig
 from .meta import JsonSchemaType, without_config_validation
 from .runner import TestSuite, load_suite_document
@@ -39,13 +40,18 @@ def service_types() -> dict[str, type]:
     return _registered_types("dugwayservice")
 
 
+def converter_types() -> dict[str, type]:
+    """Every installed converter type, by the name used as its 'type' in a suite file."""
+    return _registered_types("dugwayconverter")
+
+
 def step_types() -> dict[str, type]:
     """Every installed and built-in test step type, by the name used as its 'type'."""
     return {**_registered_types("dugwayteststep"), **BUILTIN_STEPS}
 
 
 def placeholder_instance(cls: type, type_name: str) -> Any:
-    """Builds an instance of a service or step type without any real config."""
+    """Builds an instance of a service, converter or step type without any real config."""
     with without_config_validation():
         return cls(runner=_PlaceholderRunner(), config={"type": type_name})
 
@@ -92,6 +98,10 @@ def build_suite_schema() -> dict[str, Any]:
             "services": {
                 "type": "object",
                 "additionalProperties": _schema_by_type(services, Service.get_generic_schema()),
+            },
+            "converters": {
+                "type": "object",
+                "additionalProperties": _schema_by_type(converter_types(), Converter.get_generic_schema()),
             },
             "testCases": {"type": "object", "additionalProperties": case_schema},
             "caseSetUp": case_schema,

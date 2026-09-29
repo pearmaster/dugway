@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from time import sleep
-from typing import Any
+from typing import Any, Annotated
 
 import paho.mqtt.client as mqtt_client
 import paho.mqtt.properties as props
@@ -14,13 +14,17 @@ from paho.mqtt.packettypes import PacketTypes
 
 from . import expectations
 from .capabilities import (
+    ConversionCapability,
+    ContentWithProperties,
     FromStep,
-    JsonContentCapability,
-    JsonMultiContentCapability,
     JsonSchemaDefinedCapability,
     JsonSchemaExpectation,
     JsonSchemaFilter,
+    RawMultiContentCapability,
+    MultiValueCapability,
     ServiceDependency,
+    multi_values,
+    single_value,
 )
 from .meta import JsonConfigType, JsonSchemaType
 from .runner import DugwayRunner
@@ -34,6 +38,9 @@ BROKER_ACK_TIMEOUT_SECONDS = 10
 
 
 class MqttPropertiesComparingCapability(JsonSchemaDefinedCapability):
+    """Ignores received messages whose MQTTv5 properties don't match the ones given as
+    'filter.publishProperties'.
+    """
 
     NAME = "MqttProperties"
 
@@ -144,7 +151,7 @@ class OutgoingMessage:
     """Everything about a message that an mqtt_publish step sends."""
 
     topic: str
-    payload: str | None
+    payload: bytes | None
     qos: int
     retain: bool
     # MQTTv5 properties, named as in publishProperties
@@ -304,7 +311,7 @@ class MqttService(Service):
     def publish(
         self,
         topic: str,
-        payload: str | None,
+        payload: bytes | None,
         qos: int = 0,
         retain: bool = False,
         properties: props.Properties | None = None,
@@ -328,7 +335,7 @@ class MqttService(Service):
         self.client.message_callback_add(sub_topic, callback)
         self._subscriptions.append(sub_topic)
         result, mid = self.client.subscribe(sub_topic, qos)
-        if result != mqtt_client.MQTT_ERR_SUCCESS:
+        if result != mqtt_client.MQTT_ERR_SUCCESS or mid is None:
             raise expectations.FailedTestStep(f"Could not subscribe to {sub_topic}: {mqtt_client.error_string(result)}")
         with self._suback_lock:
             if not self._suback_lock.wait_for(lambda: mid in self._subacks, BROKER_ACK_TIMEOUT_SECONDS):
@@ -344,19 +351,17 @@ class MqttService(Service):
 class MqttPublish(TestStep):
     """Publishes a message to an MQTT broker.
 
-    Give either json for the payload, or nullPayload to send an empty message.
+    Give either json for the payload's value, or nullPayload to send an empty message. The value is
+    sent as JSON unless a converter is given, such as a protobuf converter.
     """
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
-        super().__init__(runner, config, [serv_dep_cap])
+        self._conversion_cap = ConversionCapability(runner, config)
+        super().__init__(runner, config, [serv_dep_cap, self._conversion_cap])
         self._topic = config.get("topic")
         self._qos = config.get("qos", 0)
         self._retain = config.get("retain", False)
-        if "json" in config:
-            self._payload = json.dumps(config["json"])
-        else:
-            self._payload = None
 
     def get_object_schema(self) -> JsonSchemaType:
         return {
@@ -364,6 +369,7 @@ class MqttPublish(TestStep):
                 "topic": {
                     "type": "string",
                     "description": "Topic to publish to.",
+                    "minLength": "1",
                 },
                 "qos": {"type": "integer", "default": 0, "description": "Quality of service level: 0, 1 or 2."},
                 "retain": {
@@ -379,7 +385,7 @@ class MqttPublish(TestStep):
             "oneOf": [
                 {
                     "properties": {
-                        "json": {"description": "The payload, which is sent as JSON."},
+                        "json": {"description": "The payload's value, sent as JSON unless a converter is given."},
                     },
                     "required": ["json"],
                 },
@@ -399,10 +405,17 @@ class MqttPublish(TestStep):
             ],
         }
 
+    def serialize_payload(self, value: Any) -> bytes:
+        """The bytes to publish for the payload's value."""
+        return self._conversion_cap.serialize(value)
+
     def outgoing_message(self) -> OutgoingMessage:
         """The message to publish, when the step runs."""
+        if self._topic is None or len(self._topic) == 0:
+            raise expectations.FailedTestStep("Cannot publish empty topic")
+        payload = self.serialize_payload(self._config["json"]) if "json" in self._config else None
         return OutgoingMessage(
-            self._topic, self._payload, self._qos, self._retain, dict(self._config.get("publishProperties", {}))
+            self._topic, payload, self._qos, self._retain, dict(self._config.get("publishProperties", {}))
         )
 
     def run(self):
@@ -429,22 +442,33 @@ class MqttPublish(TestStep):
         mqtt_service.publish(*pub_args)
 
 
+def deserialize_payload(converter, payload: bytes, topic: str, config: JsonConfigType | None = None) -> Any:
+    """Converts a received message's payload into a value, failing the step checking it when it can't."""
+    try:
+        return converter.deserialize(payload, config)
+    except expectations.ExpectationFailure as e:
+        raise expectations.ExpectationFailure(f"Message on '{topic}': {e}", e.expected, e.actual) from e
+
+
 class MqttSubscribe(TestStep):
     """Subscribes to an MQTT topic, and keeps collecting messages while later steps run.
 
-    Received messages must be JSON. An mqtt_message step that gives this step's id as 'from'
-    checks the messages received so far.
+    Messages are kept as the bytes received. An mqtt_message step that gives this step's id as
+    'from' checks the messages received so far, converting them from JSON or with the converter it
+    is given. A deserialize step can also convert them, for steps such as jsonpath.
     """
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         serv_dep_cap = ServiceDependency(runner, config)
         self._json_filter = JsonSchemaFilter(runner, config)
-        self._json_multi = JsonMultiContentCapability(runner, config)
+        self._raw_multi: Annotated[RawMultiContentCapability, "All messages are provided via this capability."] = RawMultiContentCapability(runner, config)
+        self._multi_value: Annotated[MultiValueCapability, "Filtered and parsed messages."] = MultiValueCapability(runner, config)
+        self._conversion_cap = ConversionCapability(runner, config)
         self._mqtt_prop_comp = MqttPropertiesComparingCapability(runner, config, "filter")
         super().__init__(
             runner,
             config,
-            [serv_dep_cap, self._json_multi, self._json_filter, self._mqtt_prop_comp],
+            [serv_dep_cap, self._raw_multi, self._json_filter, self._mqtt_prop_comp, self._conversion_cap, self._multi_value],
         )
 
     def get_object_schema(self) -> JsonSchemaType:
@@ -464,37 +488,55 @@ class MqttSubscribe(TestStep):
 
     def _receive_message(self, client: mqtt_client.Client, userdata: Any, message):
         # This runs in paho's network thread, where a raised exception would be lost,
-        # so errors are queued for the step that consumes the messages.
+        # so errors are queued for the steps that consume the messages.
+        self._logger.debug("Received message via %s", message.topic)
         try:
-            self._handle_message(message)
+            # Extract message properties
+            pub_props = getattr(message, "properties", None)
+            properties = {
+                "topic": message.topic,
+                "contentType": received_properties(pub_props)["contentType"],
+            }
+
+            # Always add raw message to rawmulticapability
+            self._raw_multi.add_content(message.payload, properties)
+
+            # Deserialize using conversion_cap (content-type is extracted from properties)
+            content = ContentWithProperties(message.payload, properties)
+            deserialized_value = self._conversion_cap.deserialize(content)
+
+            # Check filters on deserialized value
+            if not self._passes_filters_on_value(deserialized_value, pub_props):
+                return
+
+            # Call check_message hook (subclasses may modify properties)
+            self.check_message(properties, message)
+
+            # Add deserialized value to multivaluecapability
+            self._multi_value.add_content(deserialized_value, properties)
         except Exception as e:  # noqa: BLE001 - must not escape paho's thread
             self._logger.debug("Error handling message via %s: %s", message.topic, e)
-            self._json_multi.add_error(e)
+            self._raw_multi.add_error(e)
 
-    def _handle_message(self, message):
-        self._logger.debug("Received message via %s", message.topic)
-        if not self._json_filter.check_against_json_schema(message.payload):
+    def _passes_filters_on_value(self, deserialized_value: Any, pub_props) -> bool:
+        """Checks if a deserialized value passes the configured filters (JSON schema and MQTT properties)."""
+        # Check JSON schema filter on deserialized value
+        json_text = json.dumps(deserialized_value)
+        if not self._json_filter.check_against_json_schema(json_text):
             self._logger.debug("Filtered out a message that didn't validate against json schema")
-            return
-        if not self._mqtt_prop_comp.properties_match(message.properties):
-            self._logger.debug("Filtered out a message that didn't match MQTTv5 properties")
-            return
-        try:
-            deserialized_json = json.loads(message.payload)
-        except (json.decoder.JSONDecodeError, UnicodeDecodeError):
-            raise expectations.ExpectationFailure(
-                f"Message on '{message.topic}' was not JSON",
-                "JSON Formatted Message",
-                message.payload,
-            )
-        properties = {"topic": message.topic}
-        self.check_message(deserialized_json, properties, message)
-        self._json_multi.add_content(deserialized_json, properties)
+            return False
 
-    def check_message(self, payload: Any, properties: dict[str, Any], message):
+        # Check MQTT properties filter
+        if not self._mqtt_prop_comp.properties_match(pub_props):
+            self._logger.debug("Filtered out a message that didn't match MQTTv5 properties")
+            return False
+
+        return True
+
+    def check_message(self, properties: dict[str, Any], message):
         """Checks a received message that passed the filters, before it is kept. The message is
-        paho's, with its qos and MQTTv5 properties. Raising fails the step that consumes the
-        messages. Subclasses may also add to its properties.
+        paho's, with its payload, qos and MQTTv5 properties. Raising fails the step that consumes
+        the messages. Subclasses may also add to its properties.
         """
 
     def subscription_qos(self) -> int:
@@ -514,7 +556,11 @@ class MqttSubscribe(TestStep):
 
 
 class MqttMessage(TestStep):
-    """Checks the messages received by an mqtt_subscribe or asyncapi_subscribe step, or the JSON from a json step.
+    """Checks the messages received by an mqtt_subscribe or asyncapi_subscribe step, or the JSON from a
+    deserialize step.
+
+    A subscription's messages are converted from JSON, unless a converter is given, such as a
+    protobuf converter.
 
     Checked messages are removed from the subscription, so a later mqtt_message step sees only
     the messages that are left.
@@ -523,7 +569,8 @@ class MqttMessage(TestStep):
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         from_step = FromStep(runner, config)
         self._js_expect = JsonSchemaExpectation(runner, config)
-        super().__init__(runner, config, [from_step, self._js_expect])
+        self._conversion = ConversionCapability(runner, config)
+        super().__init__(runner, config, [from_step, self._js_expect, self._conversion])
 
     def get_object_schema(self) -> JsonSchemaType:
         return {
@@ -572,29 +619,37 @@ class MqttMessage(TestStep):
         if (timeoutSeconds := self._config.get("timeoutSeconds", None)) is not None:
             timeout_time = datetime.now(UTC) + timedelta(seconds=timeoutSeconds)
         from_step = self.get_capability(FromStep.NAME).get_step()
-        # A 'json' step provides both capabilities, but only fills in the one matching its source.
-        json_content_cap = from_step.find_capability(JsonContentCapability.NAME)
-        if json_content_cap is not None and json_content_cap.json_content is not None:
-            self.check_json(json_content_cap.json_content)
-        elif json_multi := from_step.find_capability(JsonMultiContentCapability.NAME):
+        # A deserialize step provides one value or many, filling in the one matching its source
+        is_single, value = single_value(from_step)
+        if is_single:
+            self.check_json(value)
+        elif multi := multi_values(from_step) or from_step.find_capability(RawMultiContentCapability.NAME):
+            # A subscription's messages are kept as received, so they are converted as they are checked
+            is_raw = isinstance(multi, RawMultiContentCapability)
             if (expect_count := self._config.get("expect", {}).get("count")) is not None:
                 while timeout_time is None or timeout_time > datetime.now(UTC):
-                    json_multi.raise_first_error()
-                    if expect_count == json_multi.count:
+                    multi.raise_first_error()
+                    if expect_count == multi.count:
                         break
                     else:
                         logger.debug("Waiting for message")
                         sleep(1)
                 else:
-                    failure = expectations.ExpectationFailure("Message count", expect_count, json_multi.count)
+                    failure = expectations.ExpectationFailure("Message count", expect_count, multi.count)
                     raise failure
-            json_multi.raise_first_error()
+            multi.raise_first_error()
             consume_count = self._config.get("consume", "all")
             if consume_count == "all":
-                consume_count = json_multi.count
+                consume_count = multi.count
             for _ in range(consume_count):
-                json_content = json_multi.get_content()
-                self.check_topic(json_content.properties.get("topic"))
-                self.check_json(json_content.content)
+                content = multi.get_content()
+                topic = content.properties.get("topic")
+                self.check_topic(topic)
+                value = content.content
+                if is_raw:
+                    converter = self._conversion.converter_for(content)
+                    config = self._conversion.config_for(converter)
+                    value = deserialize_payload(converter, content.content, topic, config)
+                self.check_json(value)
         else:
-            raise expectations.TestStepMissingCapability("No JsonMultiContent or JsonContent capability found.")
+            raise expectations.TestStepMissingCapability("No Value, MultiValue or RawMultiContent capability found.")

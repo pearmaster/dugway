@@ -15,7 +15,7 @@ testCases:
         expect:
           status_code: 200
       - id: convert_to_json
-        type: json
+        type: deserialize
         from: request_joke
         expect:
           json_schema:

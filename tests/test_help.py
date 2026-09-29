@@ -116,7 +116,7 @@ def test_help_browses_to_a_type(monkeypatch):
     prompts = FakePrompts(monkeypatch, [Kind.services, "mqtt", False])
     result = runner.invoke(cli.app, ["help"])
     assert result.exit_code == 0
-    assert prompts.offered[0] == [Kind.services, Kind.steps]
+    assert prompts.offered[0] == [Kind.services, Kind.converters, Kind.steps]
     assert prompts.offered[1] == list(summaries(Kind.services))
     assert "An MQTT broker connection" in result.output
 
@@ -135,3 +135,22 @@ def test_help_stops_when_a_menu_is_cancelled(monkeypatch):
     result = runner.invoke(cli.app, ["help"])
     assert result.exit_code == 0
     assert "Options" not in result.output
+
+
+def test_reference_lists_the_capabilities_a_step_is_built_with():
+    capabilities = {cap.name: cap.summary for cap in describe(Kind.steps, "deserialize").capabilities}
+    assert list(capabilities) == ["FromStep", "JsonSchemaExpect", "Conversion", "Value", "MultiValue"]
+    assert capabilities["FromStep"].startswith("Uses what an earlier step")
+
+
+def test_help_shows_capabilities():
+    result = runner.invoke(cli.app, ["help", "steps", "mqtt_subscribe"])
+    assert result.exit_code == 0
+    assert "Capabilities" in result.output
+    assert "RawMultiContent" in result.output
+
+
+def test_help_leaves_out_capabilities_for_types_without_any():
+    result = runner.invoke(cli.app, ["help", "converters", "json"])
+    assert result.exit_code == 0
+    assert "Capabilities" not in result.output

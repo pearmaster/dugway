@@ -2,8 +2,15 @@ from copy import copy
 
 import httpx
 
-from .capabilities import ServiceDependency, TextContentCapability
-from .expectations import ExpectationFailure
+from .capabilities import (
+    ContentWithProperties,
+    ConversionCapability,
+    FromStep,
+    RawContentCapability,
+    ServiceDependency,
+    ValueCapability,
+)
+from .expectations import ExpectationFailure, FailedTestStep, InvalidTestConfig
 from .meta import JsonConfigType, JsonSchemaType
 from .runner import DugwayRunner
 from .service import Service
@@ -67,14 +74,21 @@ class HttpService(Service):
 class HttpRequest(TestStep):
     """Sends an HTTP request to an http service, and can check the response status code.
 
-    The response body is available to later steps, such as a json step that gives this step's id
-    as 'from'.
+    Uses the provided converter to serialize the request and deserialize the response.
     """
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         self.serv_dep = ServiceDependency(runner, config)
-        resp_cap = TextContentCapability(runner, config)
-        super().__init__(runner, config, [self.serv_dep, resp_cap])
+        resp_cap = RawContentCapability(runner, config)
+        self._conversion = ConversionCapability(runner, config)
+        self._value_cap = ValueCapability(runner, config)
+        self._from_step = FromStep(
+            runner,
+            config,
+            required=False,
+            description="The id of an earlier step which provides a value for the request payload",
+        )
+        super().__init__(runner, config, [self.serv_dep, resp_cap, self._conversion, self._value_cap, self._from_step])
         self._path = config.get("path")
         self._method = config.get("method", "GET")
         self._expectations = config.get("expect", {})
@@ -109,14 +123,9 @@ class HttpRequest(TestStep):
                     "default": True,
                     "description": "Follow redirect responses.",
                 },
-                "json": {
-                    # Allow any json
-                    "description": "Request body, sent as JSON. Sets the Content-Type header to "
-                    "application/json unless a header already sets it.",
-                },
-                "content": {
-                    "type": "string",  # or allow a string
-                    "description": "Request body, sent as text. Ignored when json is given.",
+                "payload": {
+                    # Any value, since the converter decides what it can serialize
+                    "description": "Request body's value, serialized by the converter.",
                 },
                 "expect": {
                     "type": "object",
@@ -134,7 +143,35 @@ class HttpRequest(TestStep):
             "required": [
                 "path",
             ],
+            "not": {"required": ["payload", "from"]},
         }
+
+    @staticmethod
+    def _set_content_type(headers: dict[str, str], content_type: str | None):
+        if content_type and "content-type" not in [h.lower() for h in headers]:
+            headers["Content-Type"] = content_type
+
+    def _serialize(self, value, headers: dict[str, str]) -> bytes:
+        self._set_content_type(headers, self._conversion.get_converter().content_type)
+        return self._conversion.serialize(value)
+
+    def _request_body(self, headers: dict[str, str]) -> bytes | None:
+        """The request body, if there is one, setting its Content-Type in the headers unless they give one."""
+        # Checked by key because falsy payloads like {}, [], 0 and false are still bodies
+        if "payload" in self._config:
+            return self._serialize(self._config["payload"], headers)
+        if not self._from_step.is_given:
+            return None
+        source = self._from_step.get_step()
+        raw = source.find_capability(RawContentCapability.NAME)
+        if raw is not None and (content := raw.get_content()) is not None:
+            # Already serialized, so it is sent as it is
+            self._set_content_type(headers, content.properties.get("contentType"))
+            return content.content
+        value = source.find_capability(ValueCapability.NAME)
+        if value is not None and value.is_set:
+            return self._serialize(value.get(), headers)
+        raise FailedTestStep(f"The 'from' step '{source.get_name()}' did not provide content or a value to send")
 
     def run(self):
         http_service = self.serv_dep.get_service()
@@ -143,13 +180,8 @@ class HttpRequest(TestStep):
         # Copied so that adding a Content-Type doesn't modify the step's config
         headers = dict(self._config.get("headers", {}))
         httpx_kwargs = {}
-        # Checked by key because falsy bodies like {}, [], 0 and false are still bodies
-        if "json" in self._config:
-            if "content-type" not in [h.lower() for h in headers]:
-                headers["Content-Type"] = "application/json"
-            httpx_kwargs["json"] = self._config["json"]
-        elif "content" in self._config:
-            httpx_kwargs["content"] = self._config["content"]
+        if (body := self._request_body(headers)) is not None:
+            httpx_kwargs["content"] = body
         resp = http_service.make_request(
             method,
             self._path,
@@ -161,4 +193,17 @@ class HttpRequest(TestStep):
         expected_status_code = self._expectations.get("status_code")
         if expected_status_code and resp.status_code != expected_status_code:
             raise ExpectationFailure("Status code", expected_status_code, resp.status_code)
-        self.get_capability(TextContentCapability.NAME).response_body = resp.text
+        resp_cap = self.get_capability(RawContentCapability.NAME)
+        resp_cap.set_content(resp.content, {"contentType": resp.headers.get("content-type")})
+        if resp.content:
+            self._convert_response(resp_cap.get_content())
+
+    def _convert_response(self, content: ContentWithProperties):
+        if self._conversion.is_given:
+            self._value_cap.set(self._conversion.deserialize(content))
+            return
+        # Without a converter the body may be anything, such as HTML, so it is only converted if it can be
+        try:
+            self._value_cap.set(self._conversion.deserialize(content))
+        except (ExpectationFailure, InvalidTestConfig) as e:
+            self._logger.debug("Response body was not converted: %s", e)

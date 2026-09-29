@@ -6,6 +6,7 @@ import pytest
 from paho.mqtt.packettypes import PacketTypes
 
 from dugway import mqtt
+from dugway.builtin_steps import ConvertFrom
 from dugway.expectations import ExpectationFailure, FailedTestStep, InvalidTestConfig
 from dugway.mqtt import MqttMessage, MqttPublish, MqttService, MqttSubscribe
 from helpers import FakeMqttClient
@@ -51,15 +52,15 @@ def test_invalid_protocol_is_rejected(runner):
 @pytest.mark.parametrize(
     "config, payload",
     [
-        ({"json": {"a": 1}}, '{"a": 1}'),
-        ({"json": 0}, "0"),
-        ({"json": None}, "null"),
+        ({"json": {"a": 1}}, b'{"a": 1}'),
+        ({"json": 0}, b"0"),
+        ({"json": None}, b"null"),
         ({"nullPayload": True}, None),
     ],
 )
 def test_publish_payload(runner, config, payload):
     step = MqttPublish(runner, {"type": "mqtt_publish", "service": "s", "topic": "t", **config})
-    assert step._payload == payload
+    assert step.outgoing_message().payload == payload
 
 
 def test_publish_without_payload_is_rejected(runner):
@@ -96,8 +97,8 @@ def test_property_filter_skips_messages_without_properties(runner, monkeypatch):
     matching = props.Properties(PacketTypes.PUBLISH)
     matching.CorrelationData = b"1234"
     sub._receive_message(None, None, mqtt_message(properties=matching))
-    assert sub._json_multi.errors == []
-    assert sub._json_multi.count == 1
+    assert sub._raw_multi.errors == []
+    assert sub._raw_multi.count == 1
 
 
 def test_property_filter_schema_is_validated(runner):
@@ -125,7 +126,7 @@ def test_consume_leaves_remaining_messages(runner, monkeypatch):
     sub._receive_message(None, None, mqtt_message())
     sub._receive_message(None, None, mqtt_message())
     MqttMessage(runner, {"type": "mqtt_message", "from": "sub", "consume": 1}).run()
-    assert sub._json_multi.count == 1
+    assert sub._raw_multi.count == 1
 
 
 def mqtt_service(runner, monkeypatch, **fake_client_kwargs):
@@ -188,4 +189,28 @@ def test_user_property_filter(runner, monkeypatch):
         received = props.Properties(PacketTypes.PUBLISH)
         received.UserProperty = user_props
         sub._receive_message(None, None, mqtt_message(properties=received))
-    assert sub._json_multi.count == 1
+    assert sub._raw_multi.count == 1
+
+
+def test_messages_are_kept_as_received(runner, monkeypatch):
+    sub = subscription(runner, monkeypatch)
+    sub._receive_message(None, None, mqtt_message(topic="t/a", payload=b"\xff\xfe"))
+    content = sub._raw_multi.get_content()
+    assert (content.content, content.properties) == (b"\xff\xfe", {"topic": "t/a", "contentType": None})
+    assert sub._raw_multi.errors == []
+
+
+def test_json_step_parses_the_messages(runner, monkeypatch):
+    sub = subscription(runner, monkeypatch)
+    sub._receive_message(None, None, mqtt_message(payload=b'{"a": 1}'))
+    step = ConvertFrom(runner, {"type": "deserialize", "from": "sub"})
+    step.run()
+    assert step.multi_value_cap.get() == {"a": 1}
+
+
+def test_only_consumed_messages_must_be_json(runner, monkeypatch):
+    sub = subscription(runner, monkeypatch)
+    sub._receive_message(None, None, mqtt_message())
+    sub._receive_message(None, None, mqtt_message(payload=b"not json"))
+    MqttMessage(runner, {"type": "mqtt_message", "from": "sub", "consume": 1}).run()
+    assert sub._raw_multi.get() == b"not json"

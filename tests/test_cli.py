@@ -29,7 +29,7 @@ services: {}
 testCases:
   a:
     steps:
-      - type: json
+      - type: deserialize
         from: response
         expect:
           json_schema: not a schema

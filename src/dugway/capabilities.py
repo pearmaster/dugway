@@ -41,101 +41,48 @@ class JsonSchemaDefinedCapability(JsonSchemaDefinedClass):
         return f"<Capability {self._name}>"
 
 
-class JsonContentCapability(JsonSchemaDefinedCapability):
+class RawContentCapability(JsonSchemaDefinedCapability):
+    """Provides content as it was received, such as an HTTP response body, for later steps such as
+    deserialize to convert.
 
-    NAME = "JsonContent"
+    It may be text, such as JSON, or binary, such as protobuf, so steps that use it decode it themselves.
+    """
 
-    def __init__(self, runner, config: JsonConfigType):
-        super().__init__(self.NAME, runner, config)
-        self._content = ContentWithProperties(None)
-
-    @property
-    def json_content(self) -> JsonContentType | None:
-        return self._content.content
-
-    @json_content.setter
-    def json_content(self, json_resp_body: JsonContentType):
-        self._content.content = json_resp_body
-
-    def set_json_response_from_string(self, json_text: str):
-        self.json_content = json.loads(json_text)
-
-    def get_config_schema(self) -> JsonSchemaType:
-        return True
-
-
-class TextContentCapability(JsonSchemaDefinedCapability):
-
-    NAME = "TextContent"
+    NAME = "RawContent"
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(self.NAME, runner, config)
         self._content = ContentWithProperties(None)
 
     @property
-    def response_body(self) -> str | None:
+    def content(self) -> bytes | None:
         return self._content.content
 
-    @response_body.setter
-    def response_body(self, resp_body: str, properties: dict[str, Any] | None = None):
-        self._content.content = resp_body
-        if properties:
-            self._content.properties = properties
+    @content.setter
+    def content(self, content: bytes):
+        self._content.content = content
 
-    @property
-    def response_content(self) -> ContentWithProperties | None:
+    def get_content(self) -> ContentWithProperties | None:
+        """The content along with its properties, or None when there is no content yet."""
         if self._content.content is None:
             return None
         return self._content
 
-    def get_config_schema(self) -> JsonSchemaType:
-        return True
-
-
-class TextMultiContentCapability(JsonSchemaDefinedCapability):
-
-    NAME = "TextMultiContent"
-
-    def __init__(self, runner, config: JsonConfigType):
-        super().__init__(self.NAME, runner, config)
-        self._messages = Queue()
-
-    @property
-    def count(self):
-        return self._messages.qsize()
-
-    def get(self) -> str:
-        return self.get_content().content
-
-    def get_content(self) -> ContentWithProperties:
-        return self._messages.get()
-
-    def get_or_none(self) -> str | None:
-        content = self.get_content_or_none()
-        if content is not None:
-            content = content.content
-        return content
-
-    def get_content_or_none(self) -> ContentWithProperties | None:
-        try:
-            return self._messages.get_nowait()
-        except QueueEmpty:
-            return None
-
-    def add_content(self, content: str, properties: dict[str, Any] | None = None):
-        content_with_props = ContentWithProperties(content, properties)
-        self._messages.put(content_with_props)
+    def set_content(self, content: bytes, properties: dict[str, Any] | None = None):
+        self._content = ContentWithProperties(content, properties)
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
 
-    def __repr__(self) -> str:
-        return f"<TextMultiContent {self._name} {self._messages.qsize()} message count>"
 
+class RawMultiContentCapability(JsonSchemaDefinedCapability):
+    """Provides contents as they were received, such as MQTT messages, for later steps such as
+    mqtt_message or deserialize to convert.
 
-class JsonMultiContentCapability(JsonSchemaDefinedCapability):
+    They are kept in the order received and, like RawContent, may be text or binary.
+    """
 
-    NAME = "JsonMultiContent"
+    NAME = "RawMultiContent"
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(self.NAME, runner, config)
@@ -156,13 +103,13 @@ class JsonMultiContentCapability(JsonSchemaDefinedCapability):
         if self.errors:
             raise self.errors[0]
 
-    def get(self) -> JsonContentType:
+    def get(self) -> bytes:
         return self.get_content().content
 
     def get_content(self) -> ContentWithProperties:
         return self._messages.get()
 
-    def get_or_none(self) -> JsonContentType | None:
+    def get_or_none(self) -> bytes | None:
         content = self.get_content_or_none()
         if content is not None:
             content = content.content
@@ -174,18 +121,21 @@ class JsonMultiContentCapability(JsonSchemaDefinedCapability):
         except QueueEmpty:
             return None
 
-    def add_content(self, json_resp: JsonContentType, properties: dict[str, Any] | None = None):
-        content_with_props = ContentWithProperties(json_resp, properties)
+    def add_content(self, content: bytes, properties: dict[str, Any] | None = None):
+        content_with_props = ContentWithProperties(content, properties)
         self._messages.put(content_with_props)
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
 
     def __repr__(self) -> str:
-        return f"<JsonMultiContentCapability {self._name} {self._messages.qsize()} message count>"
+        return f"<RawMultiContent {self._name} {self._messages.qsize()} message count>"
 
 
 class ValueCapability(JsonSchemaDefinedCapability):
+    """Provides one value, such as a converted response body or the first match found, for later steps
+    such as jsonpath or save.
+    """
 
     NAME = "Value"
 
@@ -213,37 +163,60 @@ class ValueCapability(JsonSchemaDefinedCapability):
 
 
 class MultiValueCapability(JsonSchemaDefinedCapability):
+    """Provides values, such as converted messages or every match found, for later steps such as
+    jsonpath, mqtt_message or serialize.
+    """
 
     NAME = "MultiValue"
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(self.NAME, runner, config)
-        self._value = Queue()
+        self._values = Queue()
+        self.errors: list[Exception] = []
 
     @property
     def count(self):
-        return self._value.qsize()
+        return self._values.qsize()
+
+    def add_error(self, error: Exception):
+        """Records a problem with a value that couldn't be added, so that the step consuming the values
+        can report it.
+        """
+        self.errors.append(error)
+
+    def raise_first_error(self):
+        if self.errors:
+            raise self.errors[0]
 
     def get(self) -> Any:
-        return self._value.get()
+        return self.get_content().content
+
+    def get_content(self) -> ContentWithProperties:
+        return self._values.get()
 
     def get_or_none(self) -> Any | None:
+        content = self.get_content_or_none()
+        return None if content is None else content.content
+
+    def get_content_or_none(self) -> ContentWithProperties | None:
         try:
-            return self._value.get_nowait()
+            return self._values.get_nowait()
         except QueueEmpty:
             return None
 
-    def add_content(self, value: Any):
-        self._value.put(value)
+    def add_content(self, value: Any, properties: dict[str, Any] | None = None):
+        """Adds a value, with properties such as the topic of the message it came from."""
+        self._values.put(ContentWithProperties(value, properties))
 
     def get_config_schema(self) -> JsonSchemaType:
         return True
 
     def __repr__(self) -> str:
-        return f"<MultiValue {self._name} {self._value.qsize()} value count>"
+        return f"<MultiValue {self._name} {self._values.qsize()} value count>"
 
 
 class ServiceDependency(JsonSchemaDefinedCapability):
+    """Uses a service from the suite's services, given as 'service'."""
 
     NAME = "ServiceDependency"
 
@@ -266,9 +239,12 @@ class ServiceDependency(JsonSchemaDefinedCapability):
         return self._runner.get_service(self._config.get("service"))
 
 
-class FromStep(JsonSchemaDefinedCapability):
+class ConversionCapability(JsonSchemaDefinedCapability):
+    """Uses a converter from the suite's converters, given as 'converter', to send or receive content,
+    with the options given as 'converterConfig'.
+    """
 
-    NAME = "FromStep"
+    NAME = "Conversion"
 
     def __init__(self, runner, config: JsonConfigType):
         super().__init__(self.NAME, runner, config)
@@ -277,20 +253,89 @@ class FromStep(JsonSchemaDefinedCapability):
         return {
             "type": "object",
             "properties": {
-                "from": {
+                "converter": {
                     "type": "string",
-                    "description": "The id of an earlier step in this test case, whose output this step uses.",
-                }
+                    "description": "Name of the converter to use, as given under the suite's converters. "
+                    "Defaults to JSON for content that is sent, and to the converter that consumes the "
+                    "content's type for content that is received.",
+                },
+                "converterConfig": {
+                    "type": "object",
+                    "description": "Options for the converter, as its type accepts. See the converter type's help "
+                    "for them.",
+                },
             },
-            "required": ["from"],
         }
 
+    @property
+    def is_given(self) -> bool:
+        """Whether the step names a converter, rather than choosing one by default."""
+        return "converter" in self._config
+
+    def get_converter(self):
+        """The converter for content the step sends: the one it names, or else JSON."""
+        return self._runner.get_converter(self._config.get("converter"))
+
+    def converter_for(self, content: ContentWithProperties):
+        """The converter for content the step received: the one it names, or else the one that consumes
+        the content's type.
+        """
+        if self.is_given:
+            return self.get_converter()
+        return self._runner.converter_for(content.properties.get("contentType"))
+
+    def config_for(self, converter) -> JsonConfigType | None:
+        """The step's converterConfig, once checked against the converter's config schema."""
+        config = self._config.get("converterConfig")
+        converter.check_config(config)
+        return config
+
+    def serialize(self, value: Any) -> bytes:
+        """Serializes a value the step sends, with its converter and converterConfig."""
+        converter = self.get_converter()
+        return converter.serialize(value, self.config_for(converter))
+
+    def deserialize(self, content: ContentWithProperties) -> Any:
+        """Deserializes content the step received, with its converter and converterConfig."""
+        converter = self.converter_for(content)
+        return converter.deserialize(content.content, self.config_for(converter))
+
+
+class FromStep(JsonSchemaDefinedCapability):
+    """Uses what an earlier step in the test case provides, given as 'from'."""
+
+    NAME = "FromStep"
+
+    def __init__(
+        self,
+        runner,
+        config: JsonConfigType,
+        required: bool = True,
+        description: str = "The id of an earlier step in this test case, whose output this step uses.",
+    ):
+        self._required = required
+        self._description = description
+        super().__init__(self.NAME, runner, config)
+
+    def get_config_schema(self) -> JsonSchemaType:
+        schema = {
+            "type": "object",
+            "properties": {"from": {"type": "string", "description": self._description}},
+        }
+        if self._required:
+            schema["required"] = ["from"]
+        return schema
+
+    @property
+    def is_given(self) -> bool:
+        return "from" in self._config
+
     def get_step(self):
-        from_step_id = self._config.get("from")
-        return self._runner.get_step(from_step_id)
+        return self._runner.get_step(self._config.get("from"))
 
 
 class JsonSchemaExpectation(JsonSchemaDefinedCapability):
+    """Checks JSON values against the JSON Schema given as 'expect.json_schema'."""
 
     NAME = "JsonSchemaExpect"
 
@@ -334,6 +379,7 @@ class JsonSchemaExpectation(JsonSchemaDefinedCapability):
 
 
 class JsonSchemaFilter(JsonSchemaDefinedCapability):
+    """Ignores received messages that don't match the JSON Schema given as 'filter.json_schema'."""
 
     NAME = "JsonSchemaFilter"
 
@@ -370,3 +416,18 @@ class JsonSchemaFilter(JsonSchemaDefinedCapability):
         except JsonSchemaValidationError:
             return False
         return True
+
+
+def single_value(step) -> tuple[bool, Any]:
+    """Whether the step provides one value, such as a converted response body or the first match found,
+    and the value.
+    """
+    value_cap = step.find_capability(ValueCapability.NAME)
+    if value_cap is not None and value_cap.is_set:
+        return True, value_cap.get()
+    return False, None
+
+
+def multi_values(step) -> "MultiValueCapability | None":
+    """The values the step provides, such as converted messages, when it doesn't provide one value."""
+    return step.find_capability(MultiValueCapability.NAME)

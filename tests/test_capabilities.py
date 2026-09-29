@@ -2,19 +2,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from dugway.builtin_steps import ConvertToJson, JsonPath
+from dugway.builtin_steps import ConvertFrom, JsonPath
 from dugway.capabilities import (
-    JsonMultiContentCapability,
     MultiValueCapability,
-    TextContentCapability,
-    TextMultiContentCapability,
+    RawContentCapability,
+    RawMultiContentCapability,
 )
 from dugway.expectations import ExpectationFailure, FailedTestStep
 from dugway.mqtt import MqttMessage, MqttService, MqttSubscribe
 from helpers import FakeMqttClient, SourceStep
 
 
-@pytest.mark.parametrize("cap_class", [TextMultiContentCapability, JsonMultiContentCapability])
+@pytest.mark.parametrize("cap_class", [RawMultiContentCapability, MultiValueCapability])
 def test_multi_content_get_or_none_returns_queued_items(runner, cap_class):
     cap = cap_class(runner, {})
     cap.add_content("first")
@@ -31,8 +30,8 @@ def test_multi_value_get_or_none_returns_queued_items(runner):
     assert cap.get_or_none() is None
 
 
-def test_jsonpath_reads_from_multi_json_content(runner, monkeypatch):
-    multi = JsonMultiContentCapability(runner, {})
+def test_jsonpath_reads_from_multi_value(runner, monkeypatch):
+    multi = MultiValueCapability(runner, {})
     multi.add_content({"a": 1})
     multi.add_content({"a": 2})
     monkeypatch.setattr(runner, "get_step", lambda step_id: SourceStep(runner, [multi]))
@@ -42,7 +41,7 @@ def test_jsonpath_reads_from_multi_json_content(runner, monkeypatch):
 
 
 def test_jsonpath_enforces_maximum(runner, monkeypatch):
-    multi = JsonMultiContentCapability(runner, {})
+    multi = MultiValueCapability(runner, {})
     multi.add_content({"a": 1})
     multi.add_content({"a": 2})
     monkeypatch.setattr(runner, "get_step", lambda step_id: SourceStep(runner, [multi]))
@@ -52,7 +51,7 @@ def test_jsonpath_enforces_maximum(runner, monkeypatch):
 
 
 def test_jsonpath_enforces_minimum(runner, monkeypatch):
-    multi = JsonMultiContentCapability(runner, {})
+    multi = MultiValueCapability(runner, {})
     multi.add_content({"a": 1})
     monkeypatch.setattr(runner, "get_step", lambda step_id: SourceStep(runner, [multi]))
     step = JsonPath(runner, {"type": "jsonpath", "from": "src", "path": "$.a", "minimum": 2})
@@ -77,13 +76,13 @@ def test_mqtt_message_checks_messages_from_subscription(runner, monkeypatch):
         check.run()
 
 
-def test_mqtt_message_checks_json_content(runner, monkeypatch):
-    text = TextContentCapability(runner, {})
-    text.response_body = '{"a": 1}'
-    source = SourceStep(runner, [text])
-    to_json = ConvertToJson(
+def test_mqtt_message_checks_a_deserialized_value(runner, monkeypatch):
+    raw = RawContentCapability(runner, {})
+    raw.content = b'{"a": 1}'
+    source = SourceStep(runner, [raw])
+    to_json = ConvertFrom(
         runner,
-        {"type": "json", "from": "src", "expect": {"json_schema": {"type": "object"}}},
+        {"type": "deserialize", "from": "src", "expect": {"json_schema": {"type": "object"}}},
     )
     monkeypatch.setattr(runner, "get_step", lambda step_id: source)
     to_json.run()

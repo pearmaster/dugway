@@ -1,7 +1,7 @@
 import pytest
 
-from dugway.builtin_steps import AddService, ConvertToJson, Sleep, ValueSave
-from dugway.capabilities import TextContentCapability, ValueCapability
+from dugway.builtin_steps import AddService, ConvertFrom, Sleep, ValueSave
+from dugway.capabilities import RawContentCapability, ValueCapability
 from dugway.expectations import ExpectationFailure, FailedTestStep
 from dugway.reporter import NoOpReporter
 from dugway.runner import DugwayRunner
@@ -20,24 +20,24 @@ def runner_in_case(tmp_path):
     return runner
 
 
-def text_source(runner, monkeypatch, body):
-    text = TextContentCapability(runner, {})
-    text.response_body = body
-    monkeypatch.setattr(runner, "get_step", lambda step_id: SourceStep(runner, [text]))
+def raw_source(runner, monkeypatch, body):
+    raw = RawContentCapability(runner, {})
+    raw.content = body.encode()
+    monkeypatch.setattr(runner, "get_step", lambda step_id: SourceStep(runner, [raw]))
 
 
 def test_json_step_without_schema(runner, monkeypatch):
-    text_source(runner, monkeypatch, '{"a": 1}')
-    step = ConvertToJson(runner, {"type": "json", "from": "src"})
+    raw_source(runner, monkeypatch, '{"a": 1}')
+    step = ConvertFrom(runner, {"type": "deserialize", "from": "src"})
     step.run()
-    assert step.json_content_cap.json_content == {"a": 1}
+    assert step.value_cap.get() == {"a": 1}
 
 
 def test_json_step_schema_mismatch_is_an_expectation_failure(runner, monkeypatch):
-    text_source(runner, monkeypatch, '{"a": 1}')
-    step = ConvertToJson(
+    raw_source(runner, monkeypatch, '{"a": 1}')
+    step = ConvertFrom(
         runner,
-        {"type": "json", "from": "src", "expect": {"json_schema": {"required": ["b"]}}},
+        {"type": "deserialize", "from": "src", "expect": {"json_schema": {"required": ["b"]}}},
     )
     with pytest.raises(ExpectationFailure, match="did not match the JSON Schema"):
         step.run()

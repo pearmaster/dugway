@@ -1,6 +1,6 @@
 [project]
 name = "dugway"
-version = "0.1.0"
+version = "0.2.0b0"
 description = "Dugway testing framework"
 authors = [
     {name = "Jacob Brunson", email = "github@jacobbrunson.com"},
@@ -37,6 +37,9 @@ http = 'dugway.web:HttpService'
 mqtt = 'dugway.mqtt:MqttService'
 openapi = 'dugway.openapi:OpenApiService'
 asyncapi = 'dugway.asyncapi:AsyncApiService'
+
+[project.entry-points.dugwayconverter]
+json = 'dugway.json:JsonConverter'
 
 [project.entry-points.dugwayteststep]
 http_request = 'dugway.web:HttpRequest'

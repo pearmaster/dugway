@@ -13,10 +13,10 @@ from jacobsjsonschema.draft4 import JsonSchemaValidationError
 
 from .api_spec import load_api_document
 from .capabilities import (
-    JsonContentCapability,
     JsonSchemaExpectation,
+    RawContentCapability,
     ServiceDependency,
-    TextContentCapability,
+    ValueCapability,
 )
 from .expectations import ExpectationFailure, FailedTestStep
 from .meta import JsonConfigType, JsonContentType, JsonSchemaType
@@ -180,16 +180,16 @@ class OpenApiRequest(TestStep):
 
     The response must have a documented status code and content type, carry every required
     response header, and have a body that matches the documented schema. Only after those checks
-    pass are the step's own expectations checked. The response body is available to later steps,
-    such as json and jsonpath, that give this step's id as 'from'.
+    pass are the step's own expectations checked. A JSON response body is available to later steps,
+    such as jsonpath or save, as a value, and any body as it was received, for a deserialize step.
     """
 
     def __init__(self, runner: DugwayRunner, config: JsonConfigType):
         self.serv_dep = ServiceDependency(runner, config)
-        self._text = TextContentCapability(runner, config)
-        self._json = JsonContentCapability(runner, config)
+        self._raw = RawContentCapability(runner, config)
+        self._value = ValueCapability(runner, config)
         self._js_expect = JsonSchemaExpectation(runner, config)
-        super().__init__(runner, config, [self.serv_dep, self._text, self._json, self._js_expect])
+        super().__init__(runner, config, [self.serv_dep, self._raw, self._value, self._js_expect])
         self._expectations = config.get("expect", {})
 
     def get_object_schema(self) -> JsonSchemaType:
@@ -371,9 +371,9 @@ class OpenApiRequest(TestStep):
 
         # The document's checks come first, and the step's own expectations after
         json_body = self._validate_response(service, operation_id, operation, response)
-        self._text.response_body = response.text
+        self._raw.set_content(response.content, {"contentType": response.headers.get("content-type")})
         if json_body is not _NOT_JSON:
-            self._json.json_content = json_body
+            self._value.set(json_body)
         self._check_expectations(response, json_body)
 
     def _validate_response(self, service, operation_id, operation, response) -> Any:
@@ -402,9 +402,10 @@ class OpenApiRequest(TestStep):
         actual_type = response.headers.get("content-type", "").split(";")[0].strip()
         json_body = _NOT_JSON
         if actual_type and is_json_media_type(actual_type):
+            # The document's schemas check JSON, so the body is converted from JSON whatever its type
             try:
-                json_body = response.json()
-            except ValueError as e:
+                json_body = self._runner.get_converter(None).deserialize(response.content)
+            except ExpectationFailure as e:
                 raise ExpectationFailure(
                     f"Response body is not valid JSON although its Content-Type is {actual_type}",
                     "A JSON body",

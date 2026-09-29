@@ -1,4 +1,3 @@
-import json
 from time import sleep
 from typing import Any
 
@@ -6,14 +5,15 @@ import jsonpath
 
 from . import expectations
 from .capabilities import (
+    ConversionCapability,
     FromStep,
-    JsonContentCapability,
-    JsonMultiContentCapability,
     JsonSchemaExpectation,
     MultiValueCapability,
-    TextContentCapability,
-    TextMultiContentCapability,
+    RawContentCapability,
+    RawMultiContentCapability,
     ValueCapability,
+    multi_values,
+    single_value,
 )
 from .meta import JsonConfigType, JsonSchemaType
 from .service import Service
@@ -42,22 +42,25 @@ class Sleep(TestStep):
         sleep(int(self._runner.template_eval(self._config.get("time", 1))))
 
 
-class ConvertToJson(TestStep):
-    """Parses text from an earlier step, such as an HTTP response body, as JSON.
+class ConvertFrom(TestStep):
+    """Converts content from an earlier step, such as an HTTP response body or the messages of an
+    mqtt_subscribe step, into values, using a converter's deserializer.
 
-    Later steps, such as jsonpath or mqtt_message, use the parsed JSON by giving this step's id as
-    'from'.
+    The content is converted with the given converter, such as a protobuf converter, or else with the
+    one that consumes the content's type, or as JSON when it has no type. Later steps, such as
+    jsonpath or mqtt_message, use the values by giving this step's id as 'from'.
     """
 
     def __init__(self, runner, config: JsonConfigType):
-        self.json_content_cap = JsonContentCapability(runner, config)
-        self.json_multi_cap = JsonMultiContentCapability(runner, config)
+        self.value_cap = ValueCapability(runner, config)
+        self.multi_value_cap = MultiValueCapability(runner, config)
         from_step = FromStep(runner, config)
         self._js_expect = JsonSchemaExpectation(runner, config)
+        self._conversion_cap = ConversionCapability(runner, config)
         super().__init__(
             runner,
             config,
-            [from_step, self._js_expect, self.json_content_cap, self.json_multi_cap],
+            [from_step, self._js_expect, self._conversion_cap, self.value_cap, self.multi_value_cap],
         )
 
     def get_object_schema(self) -> JsonSchemaType:
@@ -68,23 +71,76 @@ class ConvertToJson(TestStep):
 
     def run(self):
         from_step = self.get_capability(FromStep.NAME).get_step()
-        if textual := from_step.find_capability(TextContentCapability.NAME):
-            resp_json = json.loads(textual.response_body)
-            self.check_json(resp_json)
-            self.json_content_cap.json_content = resp_json
-        elif multi_textual := from_step.find_capability(TextMultiContentCapability.NAME):
-            content = multi_textual.get_or_none()
+        if raw := from_step.find_capability(RawContentCapability.NAME):
+            if (content := raw.get_content()) is None:
+                raise expectations.FailedTestStep(f"The 'from' step '{from_step.get_name()}' has no content yet")
+            value = self._conversion_cap.deserialize(content)
+            self.check_json(value)
+            self.value_cap.set(value)
+        elif multi_raw := from_step.find_capability(RawMultiContentCapability.NAME):
+            multi_raw.raise_first_error()
+            content = multi_raw.get_content_or_none()
             while content is not None:
-                json_content = json.loads(content)
-                self.check_json(json_content)
-                self.json_multi_cap.add_content(json_content)
-                content = multi_textual.get_or_none()
+                value = self._conversion_cap.deserialize(content)
+                self.check_json(value)
+                # Kept with the value, so that mqtt_message can check the topic
+                self.multi_value_cap.add_content(value, content.properties)
+                content = multi_raw.get_content_or_none()
         else:
-            raise expectations.FailedTestStep("The 'from' step did not provide a textual response body")
+            raise expectations.FailedTestStep(
+                f"The 'from' step '{from_step.get_name()}' did not provide content to convert"
+            )
+
+
+class ConvertTo(TestStep):
+    """Converts values from an earlier step, such as a deserialize or jsonpath step, into content,
+    using the given converter's serializer.
+
+    Each value becomes content of the converter's type, keeping the properties it had, such as the
+    topic it was received on. A later step, such as deserialize, uses the content by giving this
+    step's id as 'from'.
+    """
+
+    def __init__(self, runner, config: JsonConfigType):
+        self.raw_content_cap = RawContentCapability(runner, config)
+        self.raw_multi_cap = RawMultiContentCapability(runner, config)
+        from_step = FromStep(runner, config)
+        self._conversion_cap = ConversionCapability(runner, config)
+        super().__init__(
+            runner,
+            config,
+            [from_step, self._conversion_cap, self.raw_content_cap, self.raw_multi_cap],
+        )
+
+    def get_object_schema(self) -> JsonSchemaType:
+        return {"required": ["converter"]}
+
+    def run(self):
+        converter = self._conversion_cap.get_converter()
+
+        def properties(given: dict[str, Any]) -> dict[str, Any]:
+            return {**given, "contentType": converter.content_type}
+
+        from_step = self.get_capability(FromStep.NAME).get_step()
+        is_single, value = single_value(from_step)
+        if is_single:
+            self.raw_content_cap.set_content(self._conversion_cap.serialize(value), properties({}))
+        elif multi := multi_values(from_step):
+            multi.raise_first_error()
+            content = multi.get_content_or_none()
+            while content is not None:
+                self.raw_multi_cap.add_content(
+                    self._conversion_cap.serialize(content.content), properties(content.properties)
+                )
+                content = multi.get_content_or_none()
+        else:
+            raise expectations.FailedTestStep(
+                f"The 'from' step '{from_step.get_name()}' did not provide values to convert"
+            )
 
 
 class JsonPath(TestStep):
-    """Finds values in the JSON from an earlier step, using a JSONPath or a JSON Pointer.
+    """Finds values in the JSON or value from an earlier step, using a JSONPath or a JSON Pointer.
 
     The first value found can be saved with a save step. Fails when fewer than minimum or more
     than maximum values are found.
@@ -152,23 +208,19 @@ class JsonPath(TestStep):
             self._match_count += 1
 
     def run(self):
-        found_source = False
-        json_content_cap = self.from_step.get_step().find_capability(JsonContentCapability.NAME)
-        if json_content_cap is not None and json_content_cap.json_content is not None:
-            found_source = True
-            self._search(json_content_cap.json_content)
+        from_step = self.from_step.get_step()
+        is_single, value = single_value(from_step)
+        if is_single:
+            self._search(value)
             self._runner._reporter.step_info(f"Match against '{self._match_path}'", str(self.value_cap.get()))
-        if multi_json_content_cap := self.from_step.get_step().find_capability(JsonMultiContentCapability.NAME):
-            found_source = True
-            multi_json_content_cap.raise_first_error()
-            content = multi_json_content_cap.get_or_none()
+        elif multi := multi_values(from_step):
+            multi.raise_first_error()
+            content = multi.get_or_none()
             while content is not None:
                 self._search(content)
-                content = multi_json_content_cap.get_or_none()
-        if not found_source:
-            raise expectations.FailedTestStep(
-                f"The 'from' step '{self.from_step.get_step().get_name()}' did not provide JSON content"
-            )
+                content = multi.get_or_none()
+        else:
+            raise expectations.FailedTestStep(f"The 'from' step '{from_step.get_name()}' did not provide values")
         min_matches = self._config.get("minimum", 0)
         if self._match_count < min_matches:
             raise expectations.FailedTestStep(
@@ -248,7 +300,8 @@ class AddService(TestStep):
 
 BUILTIN_STEPS = {
     "sleep": Sleep,
-    "json": ConvertToJson,
+    "deserialize": ConvertFrom,
+    "serialize": ConvertTo,
     "jsonpath": JsonPath,
     "save": ValueSave,
     "service": AddService,

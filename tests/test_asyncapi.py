@@ -222,7 +222,7 @@ def test_received_messages_are_checked_against_the_document(runner, monkeypatch,
     sub = subscribe(runner, monkeypatch, "receiveStatus")
     receive(sub, ONLINE)
     receive(sub, {"online": False})
-    assert [c.properties["message"] for c in list(sub._json_multi._messages.queue)] == ["online", "offline"]
+    assert [c.properties["message"] for c in list(sub._raw_multi._messages.queue)] == ["online", "offline"]
     check(runner, expect={"count": 2})
 
 

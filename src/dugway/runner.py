@@ -10,6 +10,9 @@ from jinja2 import Environment as Jinja2Environment
 from stevedore import driver
 
 from .case import TestCase
+from .converter import Converter
+from .expectations import ExpectationFailure, InvalidTestConfig
+from .json import JsonConverter
 from .meta import JsonSchemaType
 from .meta_class import JsonSchemaDefinedObject
 from .reporter import AbstractReporter
@@ -27,11 +30,17 @@ class TestSuite(JsonSchemaDefinedObject):
         self.logger = logging.getLogger(f"{self._name}TestSuite")
         self._runner = runner
         self._services: dict[str, Service] = {}
+        self._converters: dict[str, Converter] = {
+            "json": JsonConverter(runner, {"type": "json"}),
+        }
+        # Used by steps that aren't given a converter
         self._cases: dict[str, TestCase] = {}
         self._reporter = reporter
         self._variables = {}
         for service_name, service_config in config.get("services", {}).items():
             self.add_service(service_name, service_config)
+        for converter_name, converter_config in config.get("converters", {}).items():
+            self.add_converter(converter_name, converter_config)
         for case_key, case_config in config.get("testCases", {}).items():
             case_name = case_config.get("name", case_key)
             the_case = TestCase(case_name, self._runner, case_config, self._reporter)
@@ -54,6 +63,51 @@ class TestSuite(JsonSchemaDefinedObject):
             },
         )
         self._services[service_name] = service_mgr.driver
+
+    def add_converter(self, converter_name, converter_config):
+        converter_mgr = driver.DriverManager(
+            namespace="dugwayconverter",
+            name=converter_config.get("type"),
+            invoke_on_load=True,
+            invoke_kwds={
+                "runner": self._runner,
+                "config": converter_config,
+            },
+        )
+        self._converters[converter_name] = converter_mgr.driver
+
+    def get_converter(self, converter_name: str | None) -> Converter:
+        """The converter with this name under the suite's converters, or JSON when no name is given."""
+        if converter_name is None:
+            converter_name = 'json'
+        try:
+            return self._converters[converter_name]
+        except KeyError:
+            raise InvalidTestConfig(
+                f"There is no converter named '{converter_name}'. Converters are named under the suite's converters"
+            ) from None
+
+    def converter_for(self, content_type: str | None) -> Converter:
+        """The converter for received content of the media type, for steps that aren't given one: the one
+        suite converter that consumes it, or else JSON. Content without a type is converted as JSON.
+        """
+        if content_type is None:
+            content_type = 'application/json'
+        consuming = [name for name, converter in self._converters.items() if converter.consumes_type(content_type)]
+        if len(consuming) > 1:
+            raise InvalidTestConfig(
+                f"The converters {', '.join(consuming)} all consume '{content_type}', so the step must give the "
+                "one to use as 'converter'"
+            )
+        if consuming:
+            return self._converters[consuming[0]]
+        consumed = sorted({t for c in self._converters.values() for t in c.consumes})
+        raise ExpectationFailure(
+            f"No converter consumes content of type '{content_type}'. Give the step a 'converter' to convert it "
+            "with another",
+            f"A type one of {', '.join(consumed)}",
+            content_type,
+        )
 
     @property
     def name(self):
@@ -119,6 +173,10 @@ class TestSuite(JsonSchemaDefinedObject):
                     "type": "object",
                     "additionalProperties": Service.get_generic_schema(),
                 },
+                "converters": {
+                    "type": "object",
+                    "additionalProperties": Converter.get_generic_schema(),
+                },
                 "caseSetUp": TestCase.get_generic_schema(),
                 "caseTearDown": TestCase.get_generic_schema(),
             },
@@ -154,6 +212,12 @@ class DugwayRunner:
 
     def get_service(self, service_name: str):
         return self._suite.get_service(service_name)
+
+    def get_converter(self, converter_name: str | None):
+        return self._suite.get_converter(converter_name)
+
+    def converter_for(self, content_type: str | None):
+        return self._suite.converter_for(content_type)
 
     def get_step(self, step_id: str):
         return self._suite._current_case.get_step(step_id)

@@ -4,7 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from dugway.capabilities import JsonContentCapability, TextContentCapability
+from dugway.capabilities import RawContentCapability, ValueCapability
 from dugway.expectations import ExpectationFailure, FailedTestStep, InvalidTestConfig
 from dugway.openapi import OpenApiRequest, OpenApiService
 from dugway.reporter import NoOpReporter
@@ -221,8 +221,8 @@ def test_expected_json_schema_is_checked(runner, api, exchange):
 def test_response_body_is_available_to_later_steps(runner, api, exchange):
     called = step(runner, "getPet", parameters={"petId": 1})
     called.run()
-    assert called.get_capability(TextContentCapability.NAME).response_body == json.dumps(PET)
-    assert called.get_capability(JsonContentCapability.NAME).json_content == PET
+    assert called.get_capability(RawContentCapability.NAME).content == json.dumps(PET).encode()
+    assert called.get_capability(ValueCapability.NAME).get() == PET
 
 
 def test_default_base_url_comes_from_the_documents_servers(runner, service, exchange):

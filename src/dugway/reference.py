@@ -1,8 +1,9 @@
-"""Describes the installed service and test step types, and the options each one accepts.
+"""Describes the installed service, converter and test step types, the options each one accepts,
+and the capabilities each one is built with.
 
 A type's summary comes from its class docstring. Its options come from its config schema, which
 combines its own schema, those of the capabilities it is built with, and the generic schema for
-its kind.
+its kind. A capability's summary comes from its class docstring too.
 """
 
 import inspect
@@ -17,19 +18,20 @@ from rich.table import Table
 from rich.text import Text
 
 from .meta import JsonSchemaType
-from .schema import placeholder_instance, service_types, step_types
+from .schema import converter_types, placeholder_instance, service_types, step_types
 
 
 class Kind(str, Enum):
     services = "services"
+    converters = "converters"
     steps = "steps"
 
     @property
     def singular(self) -> str:
-        return {Kind.services: "service", Kind.steps: "step"}[self]
+        return {Kind.services: "service", Kind.converters: "converter", Kind.steps: "step"}[self]
 
     def types(self) -> dict[str, type]:
-        return service_types() if self is Kind.services else step_types()
+        return {Kind.services: service_types, Kind.converters: converter_types, Kind.steps: step_types}[self]()
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,12 @@ class Option:
 
 
 @dataclass(frozen=True)
+class Capability:
+    name: str
+    summary: str
+
+
+@dataclass(frozen=True)
 class TypeReference:
     kind: Kind
     name: str
@@ -49,6 +57,7 @@ class TypeReference:
     details: str
     options: list[Option]
     exclusive_groups: list[list[str]]
+    capabilities: list[Capability]
 
 
 REQUIRED_MARKS = {"yes": " *", "one of": " +", "": ""}
@@ -173,7 +182,8 @@ def describe(kind: Kind, name: str) -> TypeReference:
     schema, exclusive_groups = _merged_object_schema([this_type, instance.get_config_schema()])
     exclusive = {name for group in exclusive_groups for name in group}
     summary, details = _docstring_parts(cls)
-    return TypeReference(kind, name, summary, details, _options(schema, exclusive), exclusive_groups)
+    capabilities = [Capability(cap.name, _docstring_parts(type(cap))[0]) for cap in instance.capabilities]
+    return TypeReference(kind, name, summary, details, _options(schema, exclusive), exclusive_groups, capabilities)
 
 
 def render_reference(ref: TypeReference) -> RenderableType:
@@ -198,7 +208,15 @@ def render_reference(ref: TypeReference) -> RenderableType:
     notes += [f"[bold red]+[/bold red] give exactly one of: {', '.join(group)}" for group in ref.exclusive_groups]
     table.caption = "\n".join(notes)
     table.caption_justify = "left"
-    return Group(panel, table)
+    if not ref.capabilities:
+        return Group(panel, table)
+
+    capabilities = Table(title="Capabilities", title_justify="left", title_style="bold", expand=True)
+    capabilities.add_column("Capability", style="cyan", no_wrap=True)
+    capabilities.add_column("Description", ratio=1)
+    for capability in ref.capabilities:
+        capabilities.add_row(capability.name, capability.summary)
+    return Group(panel, table, capabilities)
 
 
 def render_type_list(kind: Kind) -> RenderableType:

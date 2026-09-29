@@ -23,7 +23,7 @@ from .api_spec import load_api_document
 from .capabilities import ServiceDependency
 from .expectations import ExpectationFailure, FailedTestStep, InvalidTestConfig
 from .meta import JsonConfigType, JsonSchemaType
-from .mqtt import MqttPublish, MqttService, MqttSubscribe, OutgoingMessage, received_properties
+from .mqtt import MqttPublish, MqttService, MqttSubscribe, OutgoingMessage, deserialize_payload, received_properties
 from .openapi import OpenApi30SchemaValidator, serialize_parameter
 from .runner import DugwayRunner
 
@@ -487,7 +487,7 @@ class AsyncApiPublish(MqttPublish):
             properties = self._bound_properties(operation, matched[1] if matched else None, properties)
         if matched is not None:
             self._runner._reporter.step_info("AsyncAPI message", matched[0])
-        return OutgoingMessage(topic, json.dumps(payload), qos, retain, properties if service.is_v5 else {})
+        return OutgoingMessage(topic, self.serialize_payload(payload), qos, retain, properties if service.is_v5 else {})
 
     @staticmethod
     def _bound(operation: AsyncApiOperation, name: str, given: Any, default: Any) -> Any:
@@ -613,8 +613,10 @@ class AsyncApiSubscribe(MqttSubscribe):
             actual,
         )
 
-    def check_message(self, payload: Any, properties: dict[str, Any], message):
+    def check_message(self, properties: dict[str, Any], message):
         topic = properties.get("topic")
+        # The document's schemas are checked against JSON
+        payload = deserialize_payload(self._runner.get_converter(None), message.payload, topic)
         is_v5 = self._service.is_v5
         received = received_properties(getattr(message, "properties", None))
         user_properties = received["userProperties"] if is_v5 else None

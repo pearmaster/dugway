@@ -128,7 +128,7 @@ def validate(yaml_files: YamlFiles):
 def schema():
     """Print the JSON Schema that test suite files must comply with.
 
-    It covers every installed service and test step type, and can be given to an editor to
+    It covers every installed service, converter and test step type, and can be given to an editor to
     check and complete suite files as you write them.
     """
     typer.echo(json.dumps(build_suite_schema(), indent=2))
@@ -143,6 +143,9 @@ def _browse(console: Console, kind: Kind | None):
                 "What would you like help with?",
                 choices=[
                     questionary.Choice("Services", Kind.services, description="Connections to the systems under test"),
+                    questionary.Choice(
+                        "Converters", Kind.converters, description="Formats that content is sent and received in"
+                    ),
                     questionary.Choice(
                         "Steps", Kind.steps, description="The actions and checks a test case is made of"
                     ),
@@ -188,9 +191,9 @@ def help_(
         ),
     ] = None,
 ):
-    """Browse the service and test step types, and the options each one accepts.
+    """Browse the service, converter and test step types, and the options each one accepts.
 
-    With no arguments, pick services or steps and then a type from menus, and its summary and
+    With no arguments, pick services, converters or steps and then a type from menus, and its summary and
     options are shown. Give the kind, or the kind and a type name, to skip those menus.
 
     When not run in a terminal, the available types are listed instead of prompting.
