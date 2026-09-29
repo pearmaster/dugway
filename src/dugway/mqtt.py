@@ -369,7 +369,7 @@ class MqttPublish(TestStep):
                 "topic": {
                     "type": "string",
                     "description": "Topic to publish to.",
-                    "minLength": "1",
+                    "minLength": 1,
                 },
                 "qos": {"type": "integer", "default": 0, "description": "Quality of service level: 0, 1 or 2."},
                 "retain": {
